@@ -1,0 +1,66 @@
+metadata:
+  version: 1.0.0
+  author: Autocoder Examples
+  description: Real-time data processing pipeline example
+  autocoder_version: 3.3.0
+  natural_language_description: Create a real-time data processing pipeline with WebSocket communication
+
+system:
+  name: real-time-pipeline
+  description: Real-time data processing pipeline with WebSocket dashboard
+  version: 1.0.0
+  
+  components:
+    - name: data-source
+      type: Source
+      description: Generates or receives real-time data
+      processing_mode: stream
+      inputs: []
+      outputs:
+        - name: raw_data
+          schema: RawDataSchema
+          description: Raw incoming data
+      resources:
+        ports:
+          - port: 8082
+            protocol: HTTP
+            public: true
+    
+    - name: data-processor
+      type: Transformer
+      description: Processes and transforms real-time data
+      processing_mode: stream
+      inputs:
+        - name: raw_data
+          schema: RawDataSchema
+          description: Raw input data
+      outputs:
+        - name: processed_data
+          schema: ProcessedDataSchema
+          description: Processed data ready for dashboard
+    
+    - name: real-time-dashboard
+      type: StreamProcessor
+      description: WebSocket server for real-time dashboard updates
+      processing_mode: stream
+      inputs:
+        - name: processed_data
+          schema: ProcessedDataSchema
+          description: Processed data to display
+      outputs:
+        - name: dashboard_updates
+          schema: DashboardUpdateSchema
+          description: Updates to broadcast to dashboard clients
+      resources:
+        ports:
+          - port: 8081
+            protocol: WebSocket
+            public: true
+  
+  bindings:
+    - from: data-source.raw_data
+      to: data-processor.raw_data
+      description: Send raw data for processing
+    - from: data-processor.processed_data
+      to: real-time-dashboard.processed_data
+      description: Send processed data to dashboard 

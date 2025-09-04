@@ -1,0 +1,91 @@
+# Minimal Gemini Review Configuration for Core Claims Validation
+# Ultra-focused validation of only the most critical claims
+
+project_name: "AutoCoder4_CC Minimal Claims Validation"
+project_path: "."
+output_format: "xml"
+output_file: "gemini-minimal-validation.md"
+keep_repomix: false
+
+# Extremely focused - only the most essential files
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "gemini-review*.md"
+  - "repomix-output.*"
+  - "coverage_html"
+  - "test_generation"
+  - "output"
+  - "chaos_evidence_comprehensive_production_test_*"
+  - "tests/"
+  - "docs/"
+  - "reports/"
+  - "security/"
+  - "autocoder/"
+  - "blueprint_language/"
+  - "tools/"
+  - "Evidence.md"
+  - "requirements.txt"
+  - "setup.py"
+  - "*.md"
+  - "CLAUDE.md"
+
+# Only the main entry point and generated system evidence
+documentation_files:
+  - "./generate_deployed_system.py"
+  - "./generated_systems/system_20250717_144115/message_queue_api/components/message_api.py"
+  - "./generated_systems/system_20250717_144115/message_queue_api/components/message_queue_store.py"
+  - "./generated_systems/system_20250717_144115/message_queue_api/docker-compose.yml"
+
+# Minimal focused claims
+claims_of_success: |
+  MINIMAL VALIDATION CLAIMS:
+  
+  **CLAIM 1: System Generates Real Working Code**
+  EVIDENCE: Generated components are real implementations, not stubs
+  FILE_EVIDENCE: 
+  - message_api.py: 54 lines with real async HTTP client code
+  - message_queue_store.py: 54 lines with real PostgreSQL integration
+  QUESTION: Are these actual working implementations or sophisticated stubs?
+  
+  **CLAIM 2: Complete Infrastructure Generation**
+  EVIDENCE: Generated complete docker-compose.yml with all services
+  FILE_EVIDENCE: docker-compose.yml has postgres, kafka, zookeeper, prometheus, grafana
+  QUESTION: Is this production-ready infrastructure?
+  
+  **CLAIM 3: End-to-End Pipeline Works**
+  EVIDENCE: generate_deployed_system.py successfully creates complete systems
+  FILE_EVIDENCE: Main pipeline from natural language to deployed system
+  QUESTION: Does the pipeline actually work end-to-end?
+  
+  **CLAIM 4: System Status Assessment**
+  MANUAL_ASSESSMENT: Basic systems work (0% distance), Production ready (40% distance)
+  EVIDENCE: Generated system demonstrates working end-to-end functionality
+  QUESTION: Are these distance estimates realistic?
+
+# Minimal validation prompt
+custom_prompt: |
+  CRITICAL VALIDATION: AutoCoder4_CC Working System Claims
+  
+  Validate these minimal claims against the provided code evidence:
+  
+  1. **Code Quality**: Are the generated components real implementations or stubs?
+  2. **Infrastructure**: Is the generated docker-compose production-ready?
+  3. **Pipeline**: Does the end-to-end system actually work?
+  4. **Assessment**: Are the distance estimates realistic?
+  
+  For each claim, provide:
+  - **VERIFIED**: True/False
+  - **QUALITY**: Real/Stub/Partial
+  - **ASSESSMENT**: Accurate/Optimistic/Pessimistic
+  
+  Overall: Is this a genuinely working system or sophisticated demo?

@@ -1,0 +1,29 @@
+{
+  "data_persister.py": {
+    "name": "data_persister.py",
+    "has_sync_process": false,
+    "has_async_process": true,
+    "uses_wrong_api": false,
+    "uses_correct_api": true,
+    "has_class": true,
+    "line_count": 174
+  },
+  "data_generator.py": {
+    "name": "data_generator.py",
+    "has_sync_process": false,
+    "has_async_process": true,
+    "uses_wrong_api": false,
+    "uses_correct_api": true,
+    "has_class": true,
+    "line_count": 111
+  },
+  "data_processor.py": {
+    "name": "data_processor.py",
+    "has_sync_process": false,
+    "has_async_process": true,
+    "uses_wrong_api": false,
+    "uses_correct_api": true,
+    "has_class": true,
+    "line_count": 57
+  }
+}

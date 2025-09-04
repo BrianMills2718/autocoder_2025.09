@@ -1,0 +1,196 @@
+from autocoder_cc.observability.structured_logging import get_logger
+#!/usr/bin/env python3
+"""
+Command Handler Component
+========================
+
+Base class for handling commands (write operations) in CQRS architecture.
+Commands modify state and publish events to message bus.
+
+Implements Step 6 of Enterprise Roadmap v2: Full CQRS implementation.
+"""
+import asyncio
+import json
+import logging
+from typing import Dict, Any, Optional
+from datetime import datetime
+from autocoder_cc.components.composed_base import ComposedComponent
+
+
+class CommandHandler(ComposedComponent):
+    """
+    Base class for handling commands (write operations).
+    
+    Commands are processed through this handler which:
+    1. Validates the command
+    2. Executes business logic 
+    3. Publishes events to message bus
+    4. Does NOT return data (commands don't return query results)
+    """
+    
+    def __init__(self, name: str, config: Dict[str, Any] = None):
+        super().__init__(name, config)
+        self.component_type = "CommandHandler"
+        
+        # Command processing configuration using generator_settings
+        from autocoder_cc.generators.config import generator_settings
+        self.message_bus_url = config.get('message_bus_url', generator_settings.get_rabbitmq_url())
+        self.exchange_name = config.get('exchange_name', 'commands')
+        self.event_exchange_name = config.get('event_exchange_name', 'events')
+        
+        # Statistics
+        self.commands_processed = 0
+        self.commands_failed = 0
+        self.events_published = 0
+        
+        self.logger = get_logger(f"CommandHandler.{self.name}")
+    
+    async def process(self) -> None:
+        """Process commands from input streams"""
+        try:
+            # Connect to message bus for event publishing
+            import aio_pika
+            self.connection = await aio_pika.connect_robust(self.message_bus_url)
+            self.channel = await self.connection.channel()
+            
+            # Declare exchanges
+            self.command_exchange = await self.channel.declare_exchange(
+                self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+            )
+            self.event_exchange = await self.channel.declare_exchange(
+                self.event_exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+            )
+            
+            self.logger.info(f"CommandHandler {self.name} connected to message bus")
+            
+            # Process commands from input streams
+            async for command_data in self.receive_streams['commands']:
+                await self._handle_command(command_data)
+                
+        except Exception as e:
+            self.logger.error(f"CommandHandler {self.name} failed: {e}")
+            raise
+        finally:
+            if hasattr(self, 'connection'):
+                await self.connection.close()
+    
+    async def _handle_command(self, command_data: Dict[str, Any]) -> None:
+        """Handle a single command"""
+        command_id = command_data.get('command_id', f"cmd_{asyncio.get_event_loop().time()}")
+        command_type = command_data.get('command_type', 'unknown')
+        
+        try:
+            self.logger.info(f"Processing command {command_id} of type {command_type}")
+            
+            # Validate command
+            validation_result = await self._validate_command(command_data)
+            if not validation_result['valid']:
+                await self._publish_command_failed_event(command_id, command_type, validation_result['error'])
+                self.commands_failed += 1
+                return
+            
+            # Execute business logic
+            execution_result = await self._execute_command(command_data)
+            
+            if execution_result['success']:
+                # Publish success events
+                for event in execution_result.get('events', []):
+                    await self._publish_event(event)
+                    self.events_published += 1
+                
+                self.commands_processed += 1
+                self.logger.info(f"Command {command_id} processed successfully")
+                
+            else:
+                # Publish failure event
+                await self._publish_command_failed_event(
+                    command_id, command_type, execution_result.get('error', 'Unknown error')
+                )
+                self.commands_failed += 1
+                
+        except Exception as e:
+            self.logger.error(f"Error handling command {command_id}: {e}")
+            await self._publish_command_failed_event(command_id, command_type, str(e))
+            self.commands_failed += 1
+    
+    async def _validate_command(self, command_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate command data.
+        Override in subclasses for specific validation logic.
+        """
+        # Basic validation
+        required_fields = ['command_type', 'data']
+        for field in required_fields:
+            if field not in command_data:
+                return {'valid': False, 'error': f"Missing required field: {field}"}
+        
+        return {'valid': True}
+    
+    async def _execute_command(self, command_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute command business logic.
+        MUST be overridden in subclasses with actual implementation.
+        """
+        command_type = command_data.get('command_type')
+        command_id = command_data.get('command_id')
+        
+        # Default implementation - subclasses should override
+        self.logger.warning(f"Default command execution for {command_type} - should be overridden")
+        
+        # Generate a basic success event
+        event = {
+            'event_id': f"evt_{command_id}",
+            'event_type': f"{command_type}_executed",
+            'aggregate_id': command_data.get('aggregate_id', 'unknown'),
+            'data': command_data.get('data', {}),
+            'timestamp': datetime.utcnow().isoformat(),
+            'command_id': command_id
+        }
+        
+        return {
+            'success': True,
+            'events': [event]
+        }
+    
+    async def _publish_event(self, event_data: Dict[str, Any]) -> None:
+        """Publish event to event exchange"""
+        try:
+            routing_key = f"events.{event_data.get('event_type', 'unknown')}"
+            
+            message = aio_pika.Message(
+                json.dumps(event_data).encode(),
+                content_type='application/json',
+                message_id=event_data.get('event_id'),
+                timestamp=datetime.utcnow()
+            )
+            
+            await self.event_exchange.publish(message, routing_key=routing_key)
+            self.logger.debug(f"Published event {event_data.get('event_id')} with routing key {routing_key}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to publish event: {e}")
+            raise
+    
+    async def _publish_command_failed_event(self, command_id: str, command_type: str, error: str) -> None:
+        """Publish command failure event"""
+        failure_event = {
+            'event_id': f"evt_fail_{command_id}",
+            'event_type': 'command_failed',
+            'command_id': command_id,
+            'command_type': command_type,
+            'error': error,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        await self._publish_event(failure_event)
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get command handler statistics"""
+        return {
+            'component': self.name,
+            'type': 'CommandHandler',
+            'commands_processed': self.commands_processed,
+            'commands_failed': self.commands_failed,
+            'events_published': self.events_published,
+            'success_rate': self.commands_processed / (self.commands_processed + self.commands_failed) if (self.commands_processed + self.commands_failed) > 0 else 0
+        }

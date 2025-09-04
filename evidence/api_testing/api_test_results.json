@@ -1,0 +1,54 @@
+{
+  "server_started": true,
+  "endpoints_tested": {
+    "/health": {
+      "status_code": 200,
+      "success": true,
+      "response": {
+        "status": "unhealthy",
+        "service": "test_system",
+        "version": "1.0.0",
+        "components": {
+          "test_data_store": {
+            "healthy": true,
+            "component": "test_data_store",
+            "status": {
+              "is_running": false,
+              "is_healthy": true,
+              "items_processed": 0,
+              "errors_encountered": 0,
+              "last_error": null,
+              "metadata": {}
+            },
+            "items_count": 0,
+            "storage_type": "in_memory"
+          },
+          "test_data_source": {
+            "healthy": true,
+            "component": "test_data_source",
+            "status": "operational"
+          }
+        },
+        "component_count": 2,
+        "timestamp": "2025-08-27T09:50:58.117271"
+      }
+    },
+    "/docs": {
+      "status_code": 200,
+      "success": true
+    },
+    "/openapi.json": {
+      "status_code": 200,
+      "success": true,
+      "paths": [
+        "/health",
+        "/ready"
+      ]
+    },
+    "/ready": {
+      "status_code": 200,
+      "success": true
+    }
+  },
+  "errors": []
+}

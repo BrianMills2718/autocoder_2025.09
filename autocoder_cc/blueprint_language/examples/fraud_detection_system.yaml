@@ -1,0 +1,609 @@
+# Complete Fraud Detection System Blueprint
+# Demonstrates full system generation from single blueprint
+
+metadata:
+  version: "1.0.0"
+  author: "Autocoder 3.3"
+  description: "Complete fraud detection system with ML scoring and real-time processing"
+  tags: ["fraud-detection", "ml", "real-time", "microservices"]
+  autocoder_version: "3.3.0"
+  schema_version: "1.0"
+  created: "2024-06-16T22:00:00Z"
+  natural_language_description: |
+    Build a fraud detection system that processes transactions via webhook and Kafka,
+    validates them, scores for fraud using ML and rules, aggregates risk data, routes
+    alerts by severity, and logs everything for audit compliance with real-time APIs.
+
+system:
+  name: "fraud_detection_system"
+  description: "Real-time fraud detection pipeline with ML scoring and audit compliance"
+  version: "1.0.0"
+  
+  # All 13 components in the system
+  components:
+    # Source components - data ingestion
+    - name: "webhook_receiver"
+      type: "Source"
+      description: "HTTP webhook endpoint for receiving transaction data"
+      processing_mode: "stream"
+      inputs: []
+      outputs:
+        - name: "transaction_data"
+          schema: "TransactionSchema"
+          description: "Raw transaction data from webhook"
+      resources:
+        ports:
+          - name: "webhook_port"
+            protocol: "HTTP"
+            public: true
+      observability:
+        level: "detailed"
+        
+    - name: "kafka_consumer"
+      type: "Source"
+      description: "Kafka stream consumer for transaction events"
+      processing_mode: "stream"
+      inputs: []
+      outputs:
+        - name: "transaction_stream"
+          schema: "TransactionSchema"
+          description: "Transaction stream from Kafka"
+      resources:
+        message_queues:
+          - type: "kafka"
+            connection_name: "fraud_events"
+            topics: ["transactions"]
+            consumer_group: "fraud_detection"
+      observability:
+        level: "detailed"
+    
+    # Transformation components
+    - name: "transaction_validator"
+      type: "Transformer"
+      description: "Validates transaction data completeness and format"
+      processing_mode: "stream"
+      inputs:
+        - name: "transaction"
+          schema: "TransactionSchema"
+          description: "Raw transaction to validate"
+      outputs:
+        - name: "validated_transaction"
+          schema: "ValidatedTransactionSchema"
+          description: "Validated transaction with status"
+      properties:
+        - constraint: "validation_errors is not None"
+          description: "Validation errors must be provided"
+        - constraint: "is_valid in [True, False]"
+          description: "Validation status must be boolean"
+      contracts:
+        - expression: "output.transaction_id == input.transaction_id"
+          description: "Transaction ID must be preserved"
+      observability:
+        level: "detailed"
+        custom_metrics:
+          - name: "validation_success_rate"
+            type: "gauge"
+            description: "Percentage of transactions passing validation"
+          - name: "validation_errors_by_type"
+            type: "counter"
+            description: "Count of validation errors by type"
+    
+    # ML and scoring components
+    - name: "fraud_scorer"
+      type: "Model"
+      description: "ML-based fraud scoring with rule engine integration"
+      processing_mode: "hybrid"
+      inputs:
+        - name: "transaction"
+          schema: "ValidatedTransactionSchema"
+          description: "Validated transaction to score"
+      outputs:
+        - name: "fraud_score"
+          schema: "FraudScoreSchema"
+          description: "Fraud score and risk assessment"
+      properties:
+        - constraint: "fraud_score >= 0.0 and fraud_score <= 1.0"
+          description: "Fraud score must be between 0 and 1"
+        - constraint: "risk_level in ['low', 'medium', 'high', 'critical']"
+          description: "Risk level must be valid"
+      contracts:
+        - expression: "output.transaction_id == input.transaction_id"
+          description: "Transaction ID must be preserved"
+      resources:
+        external_services:
+          - name: "ml_service"
+            service_name: "ml_inference_service"
+            protocol: "gRPC"
+          - name: "user_profile_service"
+            service_name: "user_profile_api"
+            protocol: "HTTP"
+      configuration:
+        batch_config:
+          max_batch_size: 100
+          max_wait_ms: 50
+        rule_weights:
+          amount_velocity: 0.3
+          geographic_risk: 0.2
+      observability:
+        level: "detailed"
+        custom_metrics:
+          - name: "fraud_scores_generated"
+            type: "counter"
+          - name: "fraud_score_distribution"
+            type: "histogram"
+    
+    # Aggregation components
+    - name: "risk_aggregator"
+      type: "Accumulator"
+      description: "Aggregates fraud scores across time windows"
+      processing_mode: "stream"
+      inputs:
+        - name: "fraud_score"
+          schema: "FraudScoreSchema"
+          description: "Individual fraud score to aggregate"
+      outputs:
+        - name: "risk_summary"
+          schema: "RiskSummarySchema"
+          description: "Aggregated risk data"
+      configuration:
+        window_size_ms: 300000  # 5 minutes
+        aggregation_functions: ["avg", "max", "count"]
+      observability:
+        level: "basic"
+    
+    # Routing components
+    - name: "alert_router"
+      type: "Router"
+      description: "Routes alerts based on risk level and business rules"
+      processing_mode: "stream"
+      inputs:
+        - name: "fraud_score"
+          schema: "FraudScoreSchema"
+        - name: "risk_summary"
+          schema: "RiskSummarySchema"
+      outputs:
+        - name: "alert"
+          schema: "AlertSchema"
+          description: "Routed alert with destination"
+      configuration:
+        routing_rules:
+          critical: ["email", "sms", "slack"]
+          high: ["email", "slack"]
+          medium: ["email"]
+          low: []
+      observability:
+        level: "basic"
+    
+    # Output components
+    - name: "alert_publisher"
+      type: "Sink"
+      description: "Publishes alerts to external systems"
+      processing_mode: "stream"
+      inputs:
+        - name: "alert"
+          schema: "AlertSchema"
+          description: "Alert to publish"
+      outputs: []
+      resources:
+        message_queues:
+          - type: "kafka"
+            connection_name: "fraud_events"
+            topics: ["fraud_alerts"]
+      observability:
+        level: "basic"
+    
+    - name: "audit_logger"
+      type: "Store"
+      description: "Logs all events for audit and compliance"
+      processing_mode: "stream"
+      inputs:
+        - name: "event"
+          schema: "AuditEventSchema"
+          description: "Event to audit log"
+      outputs: []
+      resources:
+        databases:
+          - type: "postgresql"
+            connection_name: "audit_database"
+            pool_size: 20
+      configuration:
+        retention_days: 2555  # 7 years for compliance
+        encryption_enabled: true
+      observability:
+        level: "detailed"
+    
+    - name: "metrics_collector"
+      type: "Sink"
+      description: "Collects and exports system metrics"
+      processing_mode: "stream"
+      inputs:
+        - name: "metric"
+          schema: "MetricSchema"
+          description: "Metric data to collect"
+      outputs: []
+      resources:
+        ports:
+          - name: "metrics_port"
+            protocol: "HTTP"
+            public: true
+      observability:
+        level: "basic"
+    
+    # Control components
+    - name: "rule_engine"
+      type: "Controller"
+      description: "Dynamic rule evaluation and adaptation"
+      processing_mode: "stream"
+      inputs:
+        - name: "feedback"
+          schema: "FeedbackSchema"
+          description: "Feedback for rule adaptation"
+      outputs:
+        - name: "rule_update"
+          schema: "RuleUpdateSchema"
+          description: "Updated rules for fraud scoring"
+      observability:
+        level: "basic"
+    
+    # Storage components
+    - name: "transaction_store"
+      type: "Store"
+      description: "Stores recent transaction history for velocity checks"
+      processing_mode: "stream"
+      inputs:
+        - name: "transaction"
+          schema: "ValidatedTransactionSchema"
+        - name: "query"
+          schema: "TransactionQuerySchema"
+      outputs:
+        - name: "transaction_history"
+          schema: "TransactionHistorySchema"
+      resources:
+        databases:
+          - type: "redis"
+            connection_name: "cache_store"
+            pool_size: 10
+      configuration:
+        capacity: 10000
+        ttl_hours: 24
+      observability:
+        level: "basic"
+    
+    # API components
+    - name: "fraud_scoring_api"
+      type: "APIEndpoint"
+      description: "REST API for fraud score queries"
+      processing_mode: "stream"
+      inputs:
+        - name: "api_request"
+          schema: "APIRequestSchema"
+          description: "API request for fraud scoring"
+      outputs:
+        - name: "api_response"
+          schema: "APIResponseSchema"
+          description: "API response with fraud score"
+      properties:
+        - constraint: "status_code >= 200 and status_code < 600"
+          description: "HTTP status code must be valid"
+      resources:
+        ports:
+          - name: "api_port"
+            protocol: "HTTP"
+            public: true
+      observability:
+        level: "detailed"
+    
+    - name: "websocket_server"
+      type: "APIEndpoint"
+      description: "WebSocket server for real-time monitoring updates"
+      processing_mode: "stream"
+      inputs:
+        - name: "update"
+          schema: "MonitoringUpdateSchema"
+          description: "Real-time update to broadcast"
+      outputs: []
+      resources:
+        ports:
+          - name: "websocket_port"
+            protocol: "WebSocket"
+            public: true
+      observability:
+        level: "basic"
+  
+  # Component connections - data flow specification
+  bindings:
+    # Source → Validation
+    - from: "webhook_receiver.transaction_data"
+      to: "transaction_validator.transaction"
+      
+    - from: "kafka_consumer.transaction_stream"
+      to: "transaction_validator.transaction"
+    
+    # Validation → Scoring
+    - from: "transaction_validator.validated_transaction"
+      to: "fraud_scorer.transaction"
+    
+    # Scoring → Multiple destinations (fan-out)
+    - from: "fraud_scorer.fraud_score"
+      to: 
+        - "risk_aggregator.fraud_score"
+        - "alert_router.fraud_score"
+        - "audit_logger.event"  # Transform to audit event
+      transformation: |
+        # Convert fraud score to audit event
+        if to_port == "audit_logger.event":
+          return {
+            "event_type": "fraud_score_generated",
+            "transaction_id": data["transaction_id"],
+            "fraud_score": data["fraud_score"],
+            "timestamp": data["scoring_timestamp"]
+          }
+        return data
+    
+    # Aggregation → Routing
+    - from: "risk_aggregator.risk_summary"
+      to: "alert_router.risk_summary"
+    
+    # Routing → Publishing
+    - from: "alert_router.alert"
+      to: "alert_publisher.alert"
+    
+    # Storage connections
+    - from: "transaction_validator.validated_transaction"
+      to: "transaction_store.transaction"
+    
+    # Control loops
+    - from: "rule_engine.rule_update"
+      to: "fraud_scorer.transaction"  # Updates scoring rules
+      condition: "rule_update.target_component == 'fraud_scorer'"
+      transformation: |
+        # Convert rule update to internal configuration update
+        return {"config_update": data, "component": "fraud_scorer"}
+    
+    # API connections - fraud_scoring_api internally processes requests
+    # No external binding needed as API handles requests internally
+    
+    # Monitoring connections
+    - from: "fraud_scorer.fraud_score"
+      to: "websocket_server.update"
+      transformation: |
+        # Convert to monitoring update
+        return {
+          "type": "fraud_score",
+          "data": data,
+          "timestamp": datetime.now().isoformat()
+        }
+  
+  # System validation requirements
+  validation:
+    performance:
+      throughput_requests_per_second: 10000
+      latency_p95_ms: 100
+      latency_p99_ms: 200
+      availability_percentage: 99.9
+    end_to_end_tests: true
+    load_testing:
+      enabled: true
+      duration_minutes: 10
+      concurrent_users: 1000
+    sample_data:
+      auto_generate: true
+      custom_samples:
+        - component: "webhook_receiver"
+          input_data:
+            transaction_id: "txn_sample_001"
+            user_id: "user_sample_123"
+            amount: 150.75
+            merchant_id: "merchant_456"
+            timestamp: "2024-06-16T22:00:00Z"
+
+# Global schema definitions
+schemas:
+  TransactionSchema:
+    type: "object"
+    required: ["transaction_id", "user_id", "amount", "timestamp"]
+    properties:
+      transaction_id:
+        type: "string"
+        pattern: "^txn_[a-zA-Z0-9]+$"
+      user_id:
+        type: "string"
+        pattern: "^user_[a-zA-Z0-9]+$"
+      amount:
+        type: "number"
+        minimum: 0.01
+      timestamp:
+        type: "string"
+        format: "date-time"
+      merchant_id:
+        type: "string"
+      currency:
+        type: "string"
+        pattern: "^[A-Z]{3}$"
+        
+  ValidatedTransactionSchema:
+    type: "object"
+    required: ["transaction_id", "is_valid", "validation_errors"]
+    properties:
+      transaction_id:
+        type: "string"
+      is_valid:
+        type: "boolean"
+      validation_errors:
+        type: "array"
+        items:
+          type: "object"
+      validated_transaction:
+        $ref: "#/schemas/TransactionSchema"
+        
+  FraudScoreSchema:
+    type: "object"
+    required: ["fraud_score", "risk_level", "transaction_id"]
+    properties:
+      fraud_score:
+        type: "number"
+        minimum: 0.0
+        maximum: 1.0
+      risk_level:
+        type: "string"
+        enum: ["low", "medium", "high", "critical"]
+      transaction_id:
+        type: "string"
+      model_version:
+        type: "string"
+      scoring_timestamp:
+        type: "string"
+        format: "date-time"
+        
+  RiskSummarySchema:
+    type: "object"
+    properties:
+      window_start:
+        type: "string"
+        format: "date-time"
+      window_end:
+        type: "string"
+        format: "date-time"
+      transaction_count:
+        type: "integer"
+      avg_fraud_score:
+        type: "number"
+      max_fraud_score:
+        type: "number"
+      high_risk_count:
+        type: "integer"
+        
+  AlertSchema:
+    type: "object"
+    required: ["alert_id", "severity", "message"]
+    properties:
+      alert_id:
+        type: "string"
+      severity:
+        type: "string"
+        enum: ["low", "medium", "high", "critical"]
+      message:
+        type: "string"
+      transaction_id:
+        type: "string"
+      channels:
+        type: "array"
+        items:
+          type: "string"
+          
+  AuditEventSchema:
+    type: "object"
+    required: ["event_id", "event_type", "timestamp"]
+    properties:
+      event_id:
+        type: "string"
+      event_type:
+        type: "string"
+      timestamp:
+        type: "string"
+        format: "date-time"
+      transaction_id:
+        type: "string"
+      data:
+        type: "object"
+        
+  APIRequestSchema:
+    type: "object"
+    required: ["transaction_id"]
+    properties:
+      transaction_id:
+        type: "string"
+      user_id:
+        type: "string"
+      amount:
+        type: "number"
+      
+  APIResponseSchema:
+    type: "object"
+    required: ["status_code"]
+    properties:
+      status_code:
+        type: "integer"
+      fraud_score:
+        type: "number"
+      risk_level:
+        type: "string"
+      error:
+        type: "object"
+        
+  # Additional schema definitions for transformation targets
+  MonitoringUpdateSchema:
+    type: "object"
+    required: ["type", "data", "timestamp"]
+    properties:
+      type:
+        type: "string"
+      data:
+        type: "object"
+      timestamp:
+        type: "string"
+        format: "date-time"
+        
+  RuleUpdateSchema:
+    type: "object"
+    required: ["rule_id", "target_component"]
+    properties:
+      rule_id:
+        type: "string"
+      target_component:
+        type: "string"
+      updated_rules:
+        type: "object"
+      timestamp:
+        type: "string"
+        format: "date-time"
+        
+  FeedbackSchema:
+    type: "object"
+    required: ["feedback_type", "transaction_id"]
+    properties:
+      feedback_type:
+        type: "string"
+      transaction_id:
+        type: "string"
+      accuracy:
+        type: "number"
+      timestamp:
+        type: "string"
+        format: "date-time"
+        
+  TransactionQuerySchema:
+    type: "object"
+    required: ["user_id"]
+    properties:
+      user_id:
+        type: "string"
+      time_range:
+        type: "object"
+      limit:
+        type: "integer"
+        
+  TransactionHistorySchema:
+    type: "object"
+    required: ["transactions"]
+    properties:
+      transactions:
+        type: "array"
+        items:
+          $ref: "#/schemas/ValidatedTransactionSchema"
+      total_count:
+        type: "integer"
+        
+  MetricSchema:
+    type: "object"
+    required: ["metric_name", "value", "timestamp"]
+    properties:
+      metric_name:
+        type: "string"
+      value:
+        type: "number"
+      timestamp:
+        type: "string"
+        format: "date-time"
+      labels:
+        type: "object"

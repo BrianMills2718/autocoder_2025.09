@@ -1,0 +1,24 @@
+- tier: 10
+  name: Validation
+  enum: CapabilityTier.VALIDATION
+  purpose: Data contract enforcement
+- tier: 20
+  name: Rate Limit
+  enum: CapabilityTier.RATE_LIMIT
+  purpose: Throughput control
+- tier: 30
+  name: State
+  enum: CapabilityTier.STATE
+  purpose: Durable component state
+- tier: 40
+  name: Retry
+  enum: CapabilityTier.RETRY
+  purpose: Transient error retries
+- tier: 50
+  name: Circuit Breaker
+  enum: CapabilityTier.CIRCUIT_BREAKER
+  purpose: Prevent cascading failure
+- tier: 90
+  name: Metrics
+  enum: CapabilityTier.METRICS
+  purpose: Observability metrics 

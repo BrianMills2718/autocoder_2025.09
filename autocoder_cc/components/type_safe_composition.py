@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""
+Type-Safe Composition Factory - P0.8-E1 Type Safety Implementation
+
+Factory for creating type-safe component compositions with strict interface validation.
+"""
+import anyio
+from typing import Dict, Any, List, Optional, Type, TypeVar, Union
+from dataclasses import dataclass
+
+from .type_safety import (
+    TypeSafetyValidator, TypeSafeComponentWrapper, InterfaceSpec, 
+    TypeValidationLevel, TypeValidationError, interface_registry,
+    create_type_safe_component, validate_component_types
+)
+from .enhanced_composition import (
+    EnhancedCompositionEngine, BehaviorComposer, DependencyInjector,
+    PipelineComposer, PerformanceAwareComposer, CompositionPattern,
+    CompositionStrategy, ComponentDependency
+)
+from .composition_interfaces import register_composition_interfaces
+from autocoder_cc.observability import get_logger, get_metrics_collector, get_tracer
+
+logger = get_logger(__name__)
+T = TypeVar('T')
+
+
+@dataclass
+class TypeSafeCompositionConfig:
+    """Configuration for type-safe composition"""
+    validation_level: TypeValidationLevel = TypeValidationLevel.STRICT
+    fail_on_interface_mismatch: bool = True
+    enable_runtime_validation: bool = True
+    performance_monitoring: bool = True
+    auto_register_interfaces: bool = True
+
+
+class TypeSafeCompositionFactory:
+    """Factory for creating type-safe component compositions"""
+    
+    def __init__(self, config: TypeSafeCompositionConfig = None):
+        self.config = config or TypeSafeCompositionConfig()
+        self.validator = TypeSafetyValidator(self.config.validation_level)
+        self.composition_engine = EnhancedCompositionEngine()
+        self.metrics_collector = get_metrics_collector("type_safe_composition")
+        self.tracer = get_tracer("type_safe_composition")
+        
+        # Type-safe composition components
+        self._type_safe_behavior_composer: Optional[TypeSafeComponentWrapper] = None
+        self._type_safe_dependency_injector: Optional[TypeSafeComponentWrapper] = None
+        self._type_safe_performance_composer: Optional[TypeSafeComponentWrapper] = None
+        
+        self._initialize_type_safe_composers()
+    
+    def _initialize_type_safe_composers(self):
+        """Initialize type-safe wrappers for composition components"""
+        try:
+            # Create type-safe behavior composer
+            self._type_safe_behavior_composer = create_type_safe_component(
+                self.composition_engine.behavior_composer,
+                "BehaviorComposer",
+                self.config.validation_level
+            )
+            
+            # Create type-safe dependency injector
+            self._type_safe_dependency_injector = create_type_safe_component(
+                self.composition_engine.dependency_injector,
+                "DependencyInjector", 
+                self.config.validation_level
+            )
+            
+            # Create type-safe performance composer
+            self._type_safe_performance_composer = create_type_safe_component(
+                self.composition_engine.performance_composer,
+                "PerformanceAwareComposer",
+                self.config.validation_level
+            )
+            
+            logger.info("Type-safe composition components initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize type-safe composers: {e}")
+            if self.config.fail_on_interface_mismatch:
+                raise
+    
+    def create_type_safe_component(self, component: Any, interface_name: str) -> TypeSafeComponentWrapper:
+        """Create a type-safe wrapper for a component"""
+        with self.tracer.span("create_type_safe_component") as span_id:
+            # Validate component interface
+            validation_errors = validate_component_types(component, interface_name)
+            
+            if validation_errors:
+                error_msg = f"Component interface validation failed: {len(validation_errors)} errors"
+                logger.error(error_msg)
+                for error in validation_errors:
+                    logger.error(f"  {error.error_message}")
+                
+                if self.config.fail_on_interface_mismatch:
+                    raise TypeError(error_msg)
+            
+            # Create type-safe wrapper
+            type_safe_component = create_type_safe_component(
+                component, interface_name, self.config.validation_level
+            )
+            
+            self.metrics_collector.record_business_event("component_wrapped", 1)
+            logger.info(f"Created type-safe component with interface '{interface_name}'")
+            
+            return type_safe_component
+    
+    def register_component_with_interface(self, component: Any, component_name: str, interface_name: str) -> TypeSafeComponentWrapper:
+        """Register a component with its interface and create type-safe wrapper"""
+        # Register the component-interface association
+        interface_registry.register_component_interface(component_name, interface_name)
+        
+        # Create type-safe wrapper
+        return self.create_type_safe_component(component, interface_name)
+    
+    def create_type_safe_pipeline(self, components: List[Any], component_interfaces: List[str] = None) -> TypeSafeComponentWrapper:
+        """Create a type-safe pipeline from components"""
+        with self.tracer.span("create_type_safe_pipeline") as span_id:
+            if component_interfaces and len(component_interfaces) != len(components):
+                raise ValueError("Number of component interfaces must match number of components")
+            
+            # Validate each component if interfaces are provided
+            type_safe_components = []
+            if component_interfaces:
+                for i, (component, interface_name) in enumerate(zip(components, component_interfaces)):
+                    type_safe_component = self.create_type_safe_component(component, interface_name)
+                    type_safe_components.append(type_safe_component.get_wrapped_component())
+            else:
+                type_safe_components = components
+            
+            # Create pipeline using composition engine
+            pipeline = self.composition_engine.create_pipeline(
+                type_safe_components,
+                type_safety=True
+            )
+            
+            # Wrap pipeline with type safety
+            type_safe_pipeline = create_type_safe_component(
+                pipeline,
+                "PipelineComposer",
+                self.config.validation_level
+            )
+            
+            self.metrics_collector.record_business_event("pipeline_created", len(components))
+            logger.info(f"Created type-safe pipeline with {len(components)} components")
+            
+            return type_safe_pipeline
+    
+    def compose_type_safe_behavior(self, behavior_spec: Dict[str, Any], behavior_interfaces: Dict[str, str] = None) -> TypeSafeComponentWrapper:
+        """Compose behaviors with type safety validation"""
+        with self.tracer.span("compose_type_safe_behavior") as span_id:
+            # Validate behavior interfaces if provided
+            if behavior_interfaces:
+                for behavior_name, interface_name in behavior_interfaces.items():
+                    if behavior_name in self._type_safe_behavior_composer.get_wrapped_component().behaviors:
+                        behavior = self._type_safe_behavior_composer.get_wrapped_component().behaviors[behavior_name]
+                        validation_errors = validate_component_types(behavior, interface_name)
+                        
+                        if validation_errors and self.config.fail_on_interface_mismatch:
+                            error_msg = f"Behavior '{behavior_name}' interface validation failed"
+                            logger.error(error_msg)
+                            raise TypeError(error_msg)
+            
+            # Compose behavior using type-safe composer
+            composed_behavior = self._type_safe_behavior_composer.compose_behavior(behavior_spec)
+            
+            # Create a simple wrapper for the composed behavior
+            class ComposedBehaviorWrapper:
+                def __init__(self, behavior):
+                    self.behavior = behavior
+                    self.name = behavior_spec.get('name', 'composed_behavior')
+                
+                async def execute(self, *args, **kwargs):
+                    if asyncio.iscoroutinefunction(self.behavior):
+                        return await self.behavior(*args, **kwargs)
+                    else:
+                        return self.behavior(*args, **kwargs)
+            
+            wrapper = ComposedBehaviorWrapper(composed_behavior)
+            
+            self.metrics_collector.record_business_event("behavior_composed", 1)
+            logger.info(f"Composed type-safe behavior: {behavior_spec.get('name', 'unnamed')}")
+            
+            return wrapper
+    
+    def create_type_safe_system(self, pattern: CompositionPattern, components: Dict[str, Any], component_interfaces: Dict[str, str] = None) -> Dict[str, TypeSafeComponentWrapper]:
+        """Create a type-safe system using composition pattern"""
+        with self.tracer.span("create_type_safe_system") as span_id:
+            # Validate component interfaces if provided
+            type_safe_components = {}
+            
+            if component_interfaces:
+                for comp_name, component in components.items():
+                    if comp_name in component_interfaces:
+                        interface_name = component_interfaces[comp_name]
+                        type_safe_component = self.create_type_safe_component(component, interface_name)
+                        type_safe_components[comp_name] = type_safe_component
+                    else:
+                        # Use component without type safety validation
+                        type_safe_components[comp_name] = component
+                        logger.warning(f"Component '{comp_name}' has no interface specification")
+            else:
+                type_safe_components = components
+            
+            # Validate composition pattern
+            pattern_errors = validate_component_types(pattern, "CompositionPattern")
+            if pattern_errors and self.config.fail_on_interface_mismatch:
+                error_msg = f"Composition pattern validation failed: {len(pattern_errors)} errors"
+                logger.error(error_msg)
+                raise TypeError(error_msg)
+            
+            # Extract wrapped components for composition
+            wrapped_components = {}
+            for name, comp in type_safe_components.items():
+                if isinstance(comp, TypeSafeComponentWrapper):
+                    wrapped_components[name] = comp.get_wrapped_component()
+                else:
+                    wrapped_components[name] = comp
+            
+            # Compose system using composition engine
+            composed_system = self.composition_engine.compose_system(pattern.name, wrapped_components)
+            
+            # Return type-safe components for the composed system
+            result_components = {}
+            for name, component in composed_system.items():
+                if name in type_safe_components and isinstance(type_safe_components[name], TypeSafeComponentWrapper):
+                    result_components[name] = type_safe_components[name]
+                else:
+                    result_components[name] = component
+            
+            self.metrics_collector.record_business_event("system_composed", len(components))
+            logger.info(f"Created type-safe system with pattern '{pattern.name}' ({len(components)} components)")
+            
+            return result_components
+    
+    def validate_system_types(self, components: Dict[str, Any], component_interfaces: Dict[str, str]) -> Dict[str, List[TypeValidationError]]:
+        """Validate types for an entire system"""
+        with self.tracer.span("validate_system_types") as span_id:
+            validation_results = {}
+            
+            for comp_name, component in components.items():
+                if comp_name in component_interfaces:
+                    interface_name = component_interfaces[comp_name]
+                    validation_errors = validate_component_types(component, interface_name)
+                    validation_results[comp_name] = validation_errors
+                    
+                    if validation_errors:
+                        logger.warning(f"Component '{comp_name}' has {len(validation_errors)} validation errors")
+                else:
+                    logger.warning(f"Component '{comp_name}' has no interface specification")
+                    validation_results[comp_name] = []
+            
+            total_errors = sum(len(errors) for errors in validation_results.values())
+            if total_errors > 0:
+                self.metrics_collector.record_business_event("system_validation_errors", total_errors)
+            
+            logger.info(f"System validation completed: {total_errors} total errors across {len(components)} components")
+            
+            return validation_results
+    
+    def get_validation_summary(self) -> Dict[str, Any]:
+        """Get summary of all validation results"""
+        return self.validator.get_error_summary()
+    
+    def clear_validation_errors(self):
+        """Clear accumulated validation errors"""
+        self.validator.clear_errors()
+
+
+# Global type-safe composition factory instance
+type_safe_factory = TypeSafeCompositionFactory()
+
+
+def create_type_safe_composition_factory(config: TypeSafeCompositionConfig = None) -> TypeSafeCompositionFactory:
+    """Create a new type-safe composition factory with custom configuration"""
+    return TypeSafeCompositionFactory(config)
+
+
+def get_default_type_safe_factory() -> TypeSafeCompositionFactory:
+    """Get the default global type-safe composition factory"""
+    return type_safe_factory

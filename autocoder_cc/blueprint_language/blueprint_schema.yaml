@@ -1,0 +1,378 @@
+# Autocoder 5.2.0 Blueprint Language Schema Definition
+# Formal specification for declarative component definition
+
+# Root blueprint structure
+Blueprint:
+  type: object
+  required: [component, schema_version]
+  properties:
+    # Schema version for migration support (Enterprise Roadmap v3 Phase 1)
+    schema_version:
+      type: string
+      description: "Version of the blueprint schema for safe evolution"
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+      example: "1.0.0"
+    
+    component:
+      $ref: "#/definitions/Component"
+    
+    # Optional metadata
+    metadata:
+      $ref: "#/definitions/Metadata"
+    
+    # Schema definitions for this blueprint
+    schemas:
+      type: object
+      additionalProperties:
+        $ref: "#/definitions/Schema"
+
+definitions:
+  # Core component definition
+  Component:
+    type: object
+    required: [name, type, processing_mode]
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Component name in snake_case"
+        
+      type:
+        type: string
+        enum: 
+          - "Source"        # Data ingestion components
+          - "Transformer"   # Data transformation components
+          - "Accumulator"   # Stateful aggregation components
+          - "Store"         # Data persistence components
+          - "Controller"    # Business logic coordination
+          - "Sink"          # Data output/export components
+          - "StreamProcessor" # Real-time data processing
+          - "Model"         # ML/AI inference components
+          - "APIEndpoint"   # External interface components
+          - "Router"        # Message routing components
+        description: "Component base type determining behavior patterns"
+        
+      description:
+        type: string
+        description: "Human-readable component description"
+        
+      processing_mode:
+        type: string
+        enum: ["batch", "stream", "hybrid"]
+        description: "Data processing approach"
+        
+      inputs:
+        type: array
+        items:
+          $ref: "#/definitions/Port"
+        description: "Component input ports"
+        
+      outputs:
+        type: array
+        items:
+          $ref: "#/definitions/Port"
+        description: "Component output ports"
+        
+      properties:
+        type: array
+        items:
+          $ref: "#/definitions/PropertyConstraint"
+        description: "Output property validation rules"
+        
+      contracts:
+        type: array
+        items:
+          $ref: "#/definitions/ContractConstraint"
+        description: "Input/output contract validation rules"
+        
+      resources:
+        $ref: "#/definitions/ResourceRequirements"
+        description: "External resource requirements"
+        
+      configuration:
+        type: object
+        description: "Component-specific configuration parameters"
+        
+      dependencies:
+        type: array
+        items:
+          type: string
+        description: "External service dependencies"
+        
+      implementation:
+        $ref: "#/definitions/Implementation"
+        description: "Code generation specifications"
+        
+      observability:
+        $ref: "#/definitions/Observability"
+        description: "Monitoring and logging configuration"
+
+  # Input/output port definition
+  Port:
+    type: object
+    required: [name, schema]
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Port name"
+        
+      schema:
+        type: string
+        description: "Reference to schema definition"
+        
+      required:
+        type: boolean
+        default: true
+        description: "Whether this port is required"
+        
+      description:
+        type: string
+        description: "Port description"
+
+  # Property validation constraint
+  PropertyConstraint:
+    type: object
+    required: [constraint, description]
+    properties:
+      constraint:
+        type: string
+        description: "Python expression for property validation"
+        examples:
+          - "fraud_score >= 0.0 and fraud_score <= 1.0"
+          - "amount > 0"
+          - "processing_time_ms > 0 and processing_time_ms < 5000"
+          
+      description:
+        type: string
+        description: "Human-readable constraint description"
+        
+      severity:
+        type: string
+        enum: ["error", "warning"]
+        default: "error"
+        description: "Validation failure severity"
+
+  # Contract validation constraint  
+  ContractConstraint:
+    type: object
+    required: [expression, description]
+    properties:
+      expression:
+        type: string
+        description: "Python expression relating inputs and outputs"
+        examples:
+          - "output.transaction_id == input.transaction.transaction_id"
+          - "len(output.validation_errors) > 0 if not output.is_valid else True"
+          
+      description:
+        type: string
+        description: "Human-readable contract description"
+
+  # Resource requirements
+  ResourceRequirements:
+    type: object
+    properties:
+      ports:
+        type: array
+        items:
+          type: object
+          required: [port, protocol]
+          properties:
+            port:
+              type: integer
+              minimum: 1024
+              maximum: 65535
+            protocol:
+              type: string
+              enum: ["HTTP", "HTTPS", "TCP", "UDP", "WebSocket"]
+            
+      databases:
+        type: array
+        items:
+          type: object
+          required: [type, connection_string]
+          properties:
+            type:
+              type: string
+              enum: ["postgresql", "mysql", "redis", "mongodb"]
+            connection_string:
+              type: string
+            pool_size:
+              type: integer
+              default: 10
+              
+      message_queues:
+        type: array
+        items:
+          type: object
+          required: [type, brokers]
+          properties:
+            type:
+              type: string
+              enum: ["kafka", "rabbitmq", "redis_pubsub"]
+            brokers:
+              type: array
+              items:
+                type: string
+            topics:
+              type: array
+              items:
+                type: string
+                
+      external_services:
+        type: array
+        items:
+          type: object
+          required: [name, endpoint]
+          properties:
+            name:
+              type: string
+            endpoint:
+              type: string
+            protocol:
+              type: string
+              enum: ["HTTP", "gRPC", "WebSocket"]
+            timeout_ms:
+              type: integer
+              default: 5000
+
+  # Implementation specification
+  Implementation:
+    type: object
+    required: [language, base_class]
+    properties:
+      language:
+        type: string
+        enum: ["python", "javascript", "java", "go"]
+        default: "python"
+        
+      base_class:
+        type: string
+        description: "Base class from component type"
+        
+      custom_logic:
+        type: string
+        description: "Custom implementation code"
+        
+      imports:
+        type: array
+        items:
+          type: string
+        description: "Additional imports required"
+        
+      methods:
+        type: object
+        additionalProperties:
+          type: string
+        description: "Custom method implementations"
+
+  # Observability configuration
+  Observability:
+    type: object
+    properties:
+      level:
+        type: string
+        enum: ["basic", "detailed", "debug"]
+        default: "basic"
+        
+      custom_metrics:
+        type: array
+        items:
+          type: object
+          required: [name, type]
+          properties:
+            name:
+              type: string
+            type:
+              type: string
+              enum: ["counter", "gauge", "histogram", "summary"]
+            description:
+              type: string
+            labels:
+              type: array
+              items:
+                type: string
+                
+      traces:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: true
+          sample_rate:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            default: 1.0
+
+  # Schema definition
+  Schema:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        enum: ["object", "array", "string", "number", "integer", "boolean"]
+        
+      properties:
+        type: object
+        additionalProperties:
+          $ref: "#/definitions/Schema"
+          
+      required:
+        type: array
+        items:
+          type: string
+          
+      items:
+        $ref: "#/definitions/Schema"
+        description: "Schema for array items"
+        
+      format:
+        type: string
+        description: "String format specification"
+        
+      minimum:
+        type: number
+        description: "Minimum value for numbers"
+        
+      maximum:
+        type: number
+        description: "Maximum value for numbers"
+        
+      pattern:
+        type: string
+        description: "Regex pattern for strings"
+
+  # Blueprint metadata
+  Metadata:
+    type: object
+    properties:
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+        description: "Blueprint version (semver)"
+        
+      author:
+        type: string
+        description: "Blueprint author"
+        
+      description:
+        type: string
+        description: "Blueprint description"
+        
+      tags:
+        type: array
+        items:
+          type: string
+        description: "Classification tags"
+        
+      created:
+        type: string
+        format: "date-time"
+        description: "Creation timestamp"
+        
+      autocoder_version:
+        type: string
+        description: "Required Autocoder version"

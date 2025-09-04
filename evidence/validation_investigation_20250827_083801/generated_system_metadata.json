@@ -1,0 +1,11 @@
+{
+  "generated_at": "2025-08-27T08:41:22.791175",
+  "generator_version": "autocoder4_cc-v1.0",
+  "blueprint_schema_version": "1.0.0",
+  "system_name": "validation_test_system",
+  "components_count": 3,
+  "bindings_count": 4,
+  "generator_model": "claude-sonnet-4",
+  "generation_mode": "two_phase",
+  "harness_integration": "simplified"
+}

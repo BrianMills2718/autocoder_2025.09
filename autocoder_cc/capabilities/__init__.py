@@ -1,0 +1,1 @@
+# Capability classes for ComposedComponent

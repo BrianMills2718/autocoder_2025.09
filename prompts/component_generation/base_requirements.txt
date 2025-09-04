@@ -1,0 +1,41 @@
+CRITICAL REQUIREMENTS FOR ALL COMPONENTS:
+
+1. CLASS STRUCTURE:
+   - Inherit from ComposedComponent
+   - Constructor signature: def __init__(self, name: str, config: Dict[str, Any] = None):
+   - Call parent constructor: super().__init__(name, config)
+
+2. REQUIRED METHODS:
+   - MUST implement: async def process_item(self, item: Any) -> Any method
+   - DON'T implement: setup(), cleanup(), get_health_status() - system adds these
+   - Handle errors gracefully using self.handle_error()
+   - Return meaningful results (no placeholders)
+
+3. CONFIGURATION HANDLING:
+   - Extract all settings from config parameter
+   - Use config.get() with appropriate defaults or validation
+   - For sensitive values (passwords, secrets): config.get("password") with NO default
+
+4. CODE QUALITY:
+   - CRITICAL: Ensure perfect Python syntax - no unbalanced parentheses
+   - CRITICAL: Escape regex patterns properly - use \\) not )
+   - CRITICAL: All code must compile without syntax errors
+   - NO placeholders, TODO comments, or NotImplementedError
+   - NO pass statements in functional methods
+
+5. OBSERVABILITY USAGE:
+   - Use self.logger for logging
+   - Use self.metrics_collector for metrics (counter, gauge, histogram)
+   - Use self.tracer for distributed tracing
+   - Update processed count: self.metrics_collector.counter("items_processed", 1)
+
+6. ERROR HANDLING:
+   - Use self.handle_error(exception, context) for all exceptions
+   - Never let exceptions bubble up unhandled
+   - Return error responses rather than raising exceptions
+
+SYNTAX EXAMPLES TO FOLLOW:
+- CORRECT: re.compile(r"class.*Source\\)")  # Escaped parenthesis
+- WRONG: re.compile(r"class.*Source)")     # Unescaped will cause error
+- CORRECT: pattern = r"test\\(\\)"          # Both parentheses escaped
+- WRONG: pattern = r"test()"                # Will cause regex error

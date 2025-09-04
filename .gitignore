@@ -1,0 +1,195 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+autocoder_env/
+venv/
+env/
+ENV/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Debug/trace files  
+debug_*
+trace_*
+*_output.txt
+*_output/
+*.log
+*.cache
+llm_*.txt
+llm_*.json
+generation_debug.log
+simple_generation_output.txt
+full_generation_output.txt
+failed_output*.txt
+output*.txt
+
+# Generated systems (examples only - not for production)
+generated_systems/
+test_generated_*/
+*_test_system/
+test_output/
+e2e_test_system/
+final_e2e_test/
+real_e2e_test/
+test_generated_system/
+generated_systems_refactored/
+
+# Testing artifacts
+.pytest_cache/
+htmlcov/
+coverage_html/
+.coverage
+.tox/
+.cache
+.hypothesis/
+performance_results/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and metrics
+logs/
+*.jsonl
+metrics.jsonl
+system_generation.log
+llm_trace.log
+trace_output.txt
+full_system_trace.log
+
+# Cache directories
+cache/
+.gemini-cache/
+otel_demo/
+
+# Temporary files
+scratch/
+temp_notes_*.md
+
+# Cost tracking files (keep but don't track changes)
+cost_usage_*.json
+
+# Validation output files
+validation-*.yaml
+*_validation_*.yaml
+
+# Generated analysis files
+*_analysis.md
+*_report.md
+mutation_report*.html
+
+# Test output directories
+test_*_output/
+*_after/
+*_test/
+
+# Experimental directories
+guild-*/
+universal_model_tester/
+automation/
+
+# Documentation clutter (keep only essential docs)
+*_PLAN*.md
+*_STATUS*.md  
+*_SUMMARY*.md
+*_EVIDENCE*.md
+*_FIX*.md
+*_IMPLEMENTATION*.md
+*_RESOLUTION*.md
+*_TESTING*.md
+*_VALIDATION*.md
+*_MIGRATION*.md
+*_ANALYSIS*.md
+*_ASSESSMENT*.md
+*_INVESTIGATION*.md
+*_REPORT*.md
+*_CHECKLIST*.md
+*_BACKUP*.md
+*_OLD*.md
+*_COMPLETE*.md
+*_VERIFIED*.md
+*_UPDATED*.md
+CLAUDE_*.md
+WEEK*.md
+ACTION_*.md
+BUG_*.md
+BROKEN_*.md
+ANYIO_*.md
+HEALING_*.md
+IMMEDIATE_*.md
+MASTER_*.md
+METHODICAL_*.md
+OPTION_*.md
+PERFORMANCE_*.md
+PORT_*.md
+PRIMITIVES_*.md
+PROJECT_*.md
+RADICAL_*.md
+SCHEMA_*.md
+SIGTERM_*.md
+SYSTEMATIC_*.md
+TIMEOUT_*.md
+TRUE_*.md
+UNCERTAINTIES_*.md
+VALIDATION_*.md
+
+# Generated systems and test outputs  
+simple_*/
+todo_*/
+my_*/
+chat_app/
+data_pipeline/
+quick_test/
+nl_*/
+full_test_system/
+final_functional_system/
+walking_skeleton_*/
+test_recipe_*/
+test_book_*/
+test_api_*/
+test_simple_*/
+test_todo_*/
+test_verify*/
+test_fix*/
+test_e2e_*/
+test_complete_*/
+test_final_*/
+test_cascade*/
+test_proof_*/
+test_real_*/

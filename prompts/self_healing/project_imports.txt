@@ -1,0 +1,36 @@
+# Project-Specific Import Mappings for Self-Healing
+
+# Core component infrastructure
+ComposedComponent: from observability import ComposedComponent
+ComponentCommunicator: from communication import ComponentCommunicator
+ComponentRegistry: from communication import ComponentRegistry
+MessageEnvelope: from communication import MessageEnvelope
+CommunicationConfig: from communication import CommunicationConfig
+
+# Observability classes
+StandaloneMetricsCollector: from observability import StandaloneMetricsCollector
+StandaloneTracer: from observability import StandaloneTracer
+StandaloneSpan: from observability import StandaloneSpan
+ComponentStatus: from observability import ComponentStatus
+get_logger: from observability import get_logger
+
+# Communication system factory
+create_system_communicator: from communication import create_system_communicator
+
+# Method availability notes (for healing logic)
+send_to_component: Available as self.send_to_component() method on ComposedComponent
+query_component: Available as self.query_component() method on ComposedComponent
+route_to_bindings: Available as self.route_to_bindings() method on ComposedComponent
+handle_error: Available as self.handle_error() method on ComposedComponent
+
+# Configuration patterns
+config_get_pattern: config.get("key", default_value)
+config_required_pattern: config.get("key")  # No default for required values
+
+# Component initialization pattern
+component_init_pattern: super().__init__(name, config)
+
+# Docker networking patterns
+docker_host_pattern: config.get("db_host", "postgres")  # Use service names
+docker_port_pattern: config.get("port", 8080)  # Use allocated or default port
+never_localhost: NEVER use localhost or 127.0.0.1 in Docker environment

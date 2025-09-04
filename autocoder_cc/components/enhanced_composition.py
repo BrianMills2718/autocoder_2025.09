@@ -1,0 +1,505 @@
+#!/usr/bin/env python3
+"""
+Enhanced Component Composition - P0.8-E1 Advanced Patterns
+
+Advanced composition patterns for component interaction including:
+- Pipeline composition with type safety
+- Dependency injection for component wiring
+- Behavior composition for complex interactions
+- Performance-aware composition optimization
+"""
+import anyio
+from typing import Dict, Any, List, Optional, TypeVar, Generic, Callable, Union, Type
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+import inspect
+from enum import Enum
+
+from autocoder_cc.observability import get_logger, get_metrics_collector, get_tracer
+
+logger = get_logger(__name__)
+T = TypeVar('T')
+U = TypeVar('U')
+
+
+class CompositionStrategy(Enum):
+    """Strategies for component composition"""
+    SEQUENTIAL = "sequential"      # Execute components in sequence
+    PARALLEL = "parallel"          # Execute components in parallel
+    CONDITIONAL = "conditional"    # Execute based on conditions
+    PIPELINE = "pipeline"          # Data flows through pipeline
+    MESH = "mesh"                 # Components form a mesh topology
+
+
+@dataclass
+class ComponentDependency:
+    """Represents a dependency between components"""
+    source_component: str
+    target_component: str
+    dependency_type: str
+    config: Dict[str, Any] = field(default_factory=dict)
+    optional: bool = False
+
+
+@dataclass
+class CompositionPattern:
+    """Defines how components should be composed together"""
+    name: str
+    strategy: CompositionStrategy
+    components: List[str]
+    dependencies: List[ComponentDependency] = field(default_factory=list)
+    config: Dict[str, Any] = field(default_factory=dict)
+    performance_hints: Dict[str, Any] = field(default_factory=dict)
+
+
+class BehaviorComposer:
+    """Composes complex behaviors from simple component behaviors"""
+    
+    def __init__(self):
+        self.behaviors: Dict[str, Callable] = {}
+        self.composition_rules: List[Dict[str, Any]] = []
+    
+    def register_behavior(self, name: str, behavior: Callable, metadata: Optional[Dict] = None):
+        """Register a behavior for composition"""
+        self.behaviors[name] = behavior
+        if metadata:
+            behavior._composition_metadata = metadata
+    
+    def compose_behavior(self, composition_spec: Dict[str, Any]) -> Callable:
+        """Compose a new behavior from existing behaviors"""
+        composition_type = composition_spec.get('type', 'sequential')
+        behavior_list = composition_spec.get('behaviors', [])
+        
+        if composition_type == 'sequential':
+            return self._compose_sequential(behavior_list, composition_spec)
+        elif composition_type == 'parallel':
+            return self._compose_parallel(behavior_list, composition_spec)
+        elif composition_type == 'conditional':
+            return self._compose_conditional(behavior_list, composition_spec)
+        else:
+            raise ValueError(f"Unknown composition type: {composition_type}")
+    
+    def _compose_sequential(self, behavior_names: List[str], spec: Dict) -> Callable:
+        """Compose behaviors to execute sequentially"""
+        async def composed_behavior(input_data, context):
+            result = input_data
+            for behavior_name in behavior_names:
+                if behavior_name not in self.behaviors:
+                    raise ValueError(f"Behavior '{behavior_name}' not registered")
+                
+                behavior = self.behaviors[behavior_name]
+                try:
+                    if inspect.iscoroutinefunction(behavior):
+                        result = await behavior(result, context)
+                    else:
+                        result = behavior(result, context)
+                except Exception as e:
+                    logger.error(f"Behavior '{behavior_name}' failed: {e}")
+                    if spec.get('fail_fast', True):
+                        raise
+                    result = spec.get('default_value', result)
+            
+            return result
+        
+        return composed_behavior
+    
+    def _compose_parallel(self, behavior_names: List[str], spec: Dict) -> Callable:
+        """Compose behaviors to execute in parallel"""
+        async def composed_behavior(input_data, context):
+            tasks = []
+            for behavior_name in behavior_names:
+                if behavior_name not in self.behaviors:
+                    raise ValueError(f"Behavior '{behavior_name}' not registered")
+                
+                behavior = self.behaviors[behavior_name]
+                if inspect.iscoroutinefunction(behavior):
+                    task = behavior(input_data, context)
+                else:
+                    # Wrap sync function in async
+                    async def async_wrapper():
+                        return behavior(input_data, context)
+                    task = async_wrapper()
+                
+                tasks.append(task)
+            
+            # Use task group for concurrent execution
+            results = []
+            
+            async def run_task(task, results_list):
+                try:
+                    result = await task
+                    results_list.append(result)
+                except Exception as e:
+                    results_list.append(e)
+            
+            async with anyio.create_task_group() as tg:
+                for task in tasks:
+                    tg.start_soon(run_task, task, results)
+            
+            # Process results based on composition strategy
+            aggregation = spec.get('aggregation', 'collect')
+            if aggregation == 'collect':
+                return [r for r in results if not isinstance(r, Exception)]
+            elif aggregation == 'first_success':
+                for r in results:
+                    if not isinstance(r, Exception):
+                        return r
+                raise RuntimeError("All parallel behaviors failed")
+            elif aggregation == 'merge':
+                merged = {}
+                for r in results:
+                    if isinstance(r, dict) and not isinstance(r, Exception):
+                        merged.update(r)
+                return merged
+            
+            return results
+        
+        return composed_behavior
+    
+    def _compose_conditional(self, behavior_specs: List[Dict], spec: Dict) -> Callable:
+        """Compose behaviors with conditional execution"""
+        async def composed_behavior(input_data, context):
+            for behavior_spec in behavior_specs:
+                condition = behavior_spec.get('condition')
+                behavior_name = behavior_spec.get('behavior')
+                
+                # Evaluate condition
+                if condition:
+                    if callable(condition):
+                        should_execute = condition(input_data, context)
+                    else:
+                        # Simple attribute-based conditions
+                        should_execute = self._evaluate_condition(condition, input_data, context)
+                else:
+                    should_execute = True
+                
+                if should_execute:
+                    if behavior_name not in self.behaviors:
+                        raise ValueError(f"Behavior '{behavior_name}' not registered")
+                    
+                    behavior = self.behaviors[behavior_name]
+                    if inspect.iscoroutinefunction(behavior):
+                        return await behavior(input_data, context)
+                    else:
+                        return behavior(input_data, context)
+            
+            # No condition matched
+            return spec.get('default_value', input_data)
+        
+        return composed_behavior
+    
+    def _evaluate_condition(self, condition: str, input_data: Any, context: Any) -> bool:
+        """Evaluate simple string-based conditions"""
+        # Simple condition evaluation - can be enhanced with expression parser
+        if hasattr(input_data, condition):
+            return bool(getattr(input_data, condition))
+        elif isinstance(input_data, dict) and condition in input_data:
+            return bool(input_data[condition])
+        return False
+
+
+class DependencyInjector:
+    """Handles dependency injection for component composition"""
+    
+    def __init__(self):
+        self.components: Dict[str, Any] = {}
+        self.dependencies: List[ComponentDependency] = []
+        self.injection_rules: Dict[str, List[str]] = {}
+    
+    def register_component(self, name: str, component: Any, dependencies: List[str] = None):
+        """Register a component with its dependencies"""
+        self.components[name] = component
+        if dependencies:
+            self.injection_rules[name] = dependencies
+    
+    def add_dependency(self, dependency: ComponentDependency):
+        """Add a dependency relationship"""
+        self.dependencies.append(dependency)
+    
+    def wire_components(self) -> Dict[str, Any]:
+        """Wire all components together based on dependencies"""
+        wired_components = {}
+        
+        # Topological sort to determine injection order
+        injection_order = self._topological_sort()
+        
+        for component_name in injection_order:
+            if component_name not in self.components:
+                continue
+            
+            component = self.components[component_name]
+            
+            # Inject dependencies
+            if component_name in self.injection_rules:
+                dependencies = self.injection_rules[component_name]
+                for dep_name in dependencies:
+                    if dep_name in wired_components:
+                        self._inject_dependency(component, dep_name, wired_components[dep_name])
+            
+            wired_components[component_name] = component
+        
+        return wired_components
+    
+    def _topological_sort(self) -> List[str]:
+        """Topologically sort components based on dependencies"""
+        # Simple topological sort implementation
+        visited = set()
+        temp_visited = set()
+        order = []
+        
+        def visit(component_name: str):
+            if component_name in temp_visited:
+                raise ValueError(f"Circular dependency detected involving {component_name}")
+            if component_name in visited:
+                return
+            
+            temp_visited.add(component_name)
+            
+            # Find dependencies
+            for dep in self.dependencies:
+                if dep.target_component == component_name:
+                    visit(dep.source_component)
+            
+            temp_visited.remove(component_name)
+            visited.add(component_name)
+            order.append(component_name)
+        
+        for component_name in self.components:
+            if component_name not in visited:
+                visit(component_name)
+        
+        return order
+    
+    def _inject_dependency(self, target_component: Any, dep_name: str, dep_component: Any):
+        """Inject a dependency into a target component"""
+        # Try different injection methods
+        if hasattr(target_component, f'set_{dep_name}'):
+            getattr(target_component, f'set_{dep_name}')(dep_component)
+        elif hasattr(target_component, 'inject_dependency'):
+            target_component.inject_dependency(dep_name, dep_component)
+        elif hasattr(target_component, dep_name):
+            setattr(target_component, dep_name, dep_component)
+        else:
+            logger.warning(f"Could not inject dependency '{dep_name}' into component")
+
+
+class PipelineComposer(Generic[T, U]):
+    """Composes components into type-safe pipelines"""
+    
+    def __init__(self):
+        self.stages: List[Callable] = []
+        self.type_validators: List[Callable] = []
+        self.performance_metrics: Dict[str, Any] = {}
+    
+    def add_stage(self, stage: Callable[[T], U], input_type: Type[T] = None, output_type: Type[U] = None):
+        """Add a stage to the pipeline with optional type validation"""
+        self.stages.append(stage)
+        
+        if input_type or output_type:
+            def type_validator(data):
+                if input_type and not isinstance(data, input_type):
+                    raise TypeError(f"Expected {input_type}, got {type(data)}")
+                return data
+            
+            self.type_validators.append(type_validator)
+        else:
+            self.type_validators.append(None)
+    
+    async def execute(self, input_data: T) -> U:
+        """Execute the pipeline with type safety"""
+        current_data = input_data
+        
+        for i, (stage, validator) in enumerate(zip(self.stages, self.type_validators)):
+            try:
+                # Validate input type if validator exists
+                if validator:
+                    validator(current_data)
+                
+                # Execute stage
+                if inspect.iscoroutinefunction(stage):
+                    current_data = await stage(current_data)
+                else:
+                    current_data = stage(current_data)
+                
+                # Record performance metrics
+                self.performance_metrics[f'stage_{i}'] = {
+                    'executed': True,
+                    'input_type': type(input_data).__name__,
+                    'output_type': type(current_data).__name__
+                }
+                
+            except Exception as e:
+                logger.error(f"Pipeline stage {i} failed: {e}")
+                self.performance_metrics[f'stage_{i}'] = {
+                    'executed': False,
+                    'error': str(e)
+                }
+                raise
+        
+        return current_data
+    
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get performance metrics for the pipeline"""
+        return self.performance_metrics.copy()
+
+
+class PerformanceAwareComposer:
+    """Composes components with performance optimization"""
+    
+    def __init__(self):
+        self.component_metrics: Dict[str, Dict[str, Any]] = {}
+        self.optimization_strategies: Dict[str, Callable] = {}
+    
+    def register_performance_profile(self, component_name: str, metrics: Dict[str, Any]):
+        """Register performance characteristics of a component"""
+        self.component_metrics[component_name] = metrics
+    
+    def register_optimization_strategy(self, strategy_name: str, strategy: Callable):
+        """Register an optimization strategy"""
+        self.optimization_strategies[strategy_name] = strategy
+    
+    def optimize_composition(self, pattern: CompositionPattern) -> CompositionPattern:
+        """Optimize a composition pattern based on performance characteristics"""
+        optimized_pattern = CompositionPattern(
+            name=f"{pattern.name}_optimized",
+            strategy=pattern.strategy,
+            components=pattern.components.copy(),
+            dependencies=pattern.dependencies.copy(),
+            config=pattern.config.copy(),
+            performance_hints=pattern.performance_hints.copy()
+        )
+        
+        # Apply performance optimizations
+        if pattern.strategy == CompositionStrategy.SEQUENTIAL:
+            optimized_pattern = self._optimize_sequential(optimized_pattern)
+        elif pattern.strategy == CompositionStrategy.PARALLEL:
+            optimized_pattern = self._optimize_parallel(optimized_pattern)
+        elif pattern.strategy == CompositionStrategy.PIPELINE:
+            optimized_pattern = self._optimize_pipeline(optimized_pattern)
+        
+        return optimized_pattern
+    
+    def _optimize_sequential(self, pattern: CompositionPattern) -> CompositionPattern:
+        """Optimize sequential composition"""
+        # Sort components by execution time (fastest first for early failure detection)
+        component_times = {}
+        for comp in pattern.components:
+            metrics = self.component_metrics.get(comp, {})
+            component_times[comp] = metrics.get('avg_execution_time', 1.0)
+        
+        # Sort by execution time
+        pattern.components.sort(key=lambda c: component_times.get(c, 1.0))
+        
+        # Add performance hints
+        pattern.performance_hints['optimization'] = 'sequential_by_speed'
+        pattern.performance_hints['estimated_total_time'] = sum(component_times.values())
+        
+        return pattern
+    
+    def _optimize_parallel(self, pattern: CompositionPattern) -> CompositionPattern:
+        """Optimize parallel composition"""
+        # Group components by resource requirements
+        cpu_intensive = []
+        io_intensive = []
+        memory_intensive = []
+        
+        for comp in pattern.components:
+            metrics = self.component_metrics.get(comp, {})
+            resource_type = metrics.get('primary_resource', 'cpu')
+            
+            if resource_type == 'cpu':
+                cpu_intensive.append(comp)
+            elif resource_type == 'io':
+                io_intensive.append(comp)
+            else:
+                memory_intensive.append(comp)
+        
+        # Add performance hints for resource-aware scheduling
+        pattern.performance_hints['resource_groups'] = {
+            'cpu_intensive': cpu_intensive,
+            'io_intensive': io_intensive,
+            'memory_intensive': memory_intensive
+        }
+        pattern.performance_hints['optimization'] = 'resource_aware_parallel'
+        
+        return pattern
+    
+    def _optimize_pipeline(self, pattern: CompositionPattern) -> CompositionPattern:
+        """Optimize pipeline composition"""
+        # Calculate pipeline bottlenecks
+        component_throughputs = {}
+        for comp in pattern.components:
+            metrics = self.component_metrics.get(comp, {})
+            component_throughputs[comp] = metrics.get('throughput', 100.0)
+        
+        # Identify bottleneck
+        bottleneck = min(component_throughputs.items(), key=lambda x: x[1])
+        
+        # Add performance hints
+        pattern.performance_hints['bottleneck_component'] = bottleneck[0]
+        pattern.performance_hints['bottleneck_throughput'] = bottleneck[1]
+        pattern.performance_hints['optimization'] = 'pipeline_bottleneck_aware'
+        
+        return pattern
+
+
+class EnhancedCompositionEngine:
+    """Main engine for enhanced component composition"""
+    
+    def __init__(self):
+        self.behavior_composer = BehaviorComposer()
+        self.dependency_injector = DependencyInjector()
+        self.performance_composer = PerformanceAwareComposer()
+        self.patterns: Dict[str, CompositionPattern] = {}
+        self.logger = get_logger(__name__)
+    
+    def register_pattern(self, pattern: CompositionPattern):
+        """Register a composition pattern"""
+        self.patterns[pattern.name] = pattern
+    
+    def compose_system(self, pattern_name: str, components: Dict[str, Any]) -> Dict[str, Any]:
+        """Compose a system using the specified pattern"""
+        if pattern_name not in self.patterns:
+            raise ValueError(f"Unknown composition pattern: {pattern_name}")
+        
+        pattern = self.patterns[pattern_name]
+        
+        # Optimize pattern if performance data is available
+        optimized_pattern = self.performance_composer.optimize_composition(pattern)
+        
+        # Register components with dependency injector
+        for comp_name in pattern.components:
+            if comp_name in components:
+                self.dependency_injector.register_component(comp_name, components[comp_name])
+        
+        # Add dependencies from pattern
+        for dep in pattern.dependencies:
+            self.dependency_injector.add_dependency(dep)
+        
+        # Wire components
+        wired_components = self.dependency_injector.wire_components()
+        
+        self.logger.info(f"Composed system with pattern '{pattern_name}' "
+                        f"({len(wired_components)} components wired)")
+        
+        return wired_components
+    
+    def create_pipeline(self, components: List[Any], type_safety: bool = True) -> PipelineComposer:
+        """Create a type-safe pipeline from components"""
+        pipeline = PipelineComposer()
+        
+        for component in components:
+            # Extract type information if available
+            if hasattr(component, '__annotations__'):
+                annotations = component.__annotations__
+                input_type = annotations.get('input')
+                output_type = annotations.get('return')
+                pipeline.add_stage(component, input_type, output_type)
+            else:
+                pipeline.add_stage(component)
+        
+        return pipeline
+    
+    def compose_behavior(self, behavior_spec: Dict[str, Any]) -> Callable:
+        """Compose complex behavior from simple behaviors"""
+        return self.behavior_composer.compose_behavior(behavior_spec)

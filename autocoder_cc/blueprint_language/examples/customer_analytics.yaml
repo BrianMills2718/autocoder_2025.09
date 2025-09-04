@@ -1,0 +1,163 @@
+metadata:
+  version: 1.0.0
+  author: Autocoder Examples
+  description: Customer Analytics Platform with real-time event processing
+  autocoder_version: 5.2.0
+  natural_language_description: Build a customer analytics platform with real-time event processing, analytics calculations, and API access to analytics data
+
+system:
+  name: customer_analytics_platform
+  description: Real-time customer analytics platform with event processing and REST API
+  version: 1.0.0
+  
+  components:
+    - name: analytics_api
+      type: APIEndpoint
+      description: REST API for querying customer analytics data and metrics
+      processing_mode: stream
+      inputs: []
+      outputs: []
+      resources:
+        ports:
+          - port: ${API_PORT:-8000}  # Use environment variable with default
+            protocol: HTTP
+            public: true
+      observability:
+        level: detailed
+        
+    - name: event_source
+      type: Source
+      description: Real-time customer event ingestion from various channels
+      processing_mode: stream
+      inputs: []
+      outputs:
+        - name: events
+          schema: CustomerEventSchema
+          description: Raw customer events
+      resources:
+        memory: 512
+      observability:
+        level: detailed
+        
+    - name: event_processor
+      type: Transformer
+      description: Event enrichment and validation processor
+      processing_mode: stream
+      inputs:
+        - name: events
+          schema: CustomerEventSchema
+          description: Raw customer events to process
+      outputs:
+        - name: enriched_events
+          schema: EnrichedEventSchema
+          description: Enriched and validated events
+      resources:
+        memory: 1024
+      observability:
+        level: detailed
+        
+    - name: analytics_engine
+      type: Transformer
+      description: Analytics calculation engine for metrics and aggregations
+      processing_mode: stream
+      inputs:
+        - name: enriched_events
+          schema: EnrichedEventSchema
+          description: Enriched events for analytics
+      outputs:
+        - name: analytics
+          schema: AnalyticsDataSchema
+          description: Calculated analytics metrics
+      resources:
+        memory: 2048
+      observability:
+        level: detailed
+        
+    - name: analytics_store
+      type: Store
+      description: PostgreSQL storage for analytics data and metrics
+      processing_mode: stream
+      inputs:
+        - name: analytics
+          schema: AnalyticsDataSchema
+          description: Analytics data to persist
+      outputs: []
+      resources:
+        memory: 1024
+        storage: 10
+      dependencies:
+        - postgres
+      observability:
+        level: detailed
+  
+  bindings:
+    - from:
+        component: event_source
+        output: events
+      to:
+        component: event_processor
+        input: events
+        
+    - from:
+        component: event_processor
+        output: enriched_events
+      to:
+        component: analytics_engine
+        input: enriched_events
+        
+    - from:
+        component: analytics_engine
+        output: analytics
+      to:
+        component: analytics_store
+        input: analytics
+
+  runtime:
+    environment: production
+    scaling: manual
+    health_check: enabled
+    
+  schemas:
+    CustomerEventSchema:
+      type: object
+      properties:
+        event_id: 
+          type: string
+        customer_id: 
+          type: string
+        event_type: 
+          type: string
+        timestamp: 
+          type: string
+        data: 
+          type: object
+        
+    EnrichedEventSchema:
+      type: object
+      properties:
+        event_id: 
+          type: string
+        customer_id: 
+          type: string
+        event_type: 
+          type: string
+        timestamp: 
+          type: string
+        data: 
+          type: object
+        enrichments: 
+          type: object
+        
+    AnalyticsDataSchema:
+      type: object
+      properties:
+        metric_id: 
+          type: string
+        metric_type: 
+          type: string
+        timestamp: 
+          type: string
+        value: 
+          type: number
+        dimensions: 
+          type: object

@@ -1,0 +1,2 @@
+ok so you are saying you generated a system from natural language using the real entry points and that the system successfully generated and you examined the code for that system and it 
+  looked good then you ran the system and then you examined the output from running the generated system and that also looked good?

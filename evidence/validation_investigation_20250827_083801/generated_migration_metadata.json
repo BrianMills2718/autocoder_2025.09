@@ -1,0 +1,8 @@
+{
+  "current_version": "1.0.0",
+  "generated_at": "2025-07-15T16:00:00Z",
+  "blueprint_hash": "f72ba0eaa292b312",
+  "schema_files": [
+    "schema_v1_0_0.sql"
+  ]
+}

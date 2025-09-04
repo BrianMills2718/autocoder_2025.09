@@ -1,0 +1,51 @@
+name: Documentation Validation
+
+on:
+  push:
+    branches: [ "main", "rand_comp_2025.0701", "2025.0714_adding_pages" ]
+  pull_request:
+    branches: [ "main", "rand_comp_2025.0701", "2025.0714_adding_pages" ]
+
+jobs:
+  docs-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyyaml
+
+      - name: Run Enhanced Documentation Health Dashboard
+        run: |
+          python autocoder_cc/tools/documentation/enhanced_doc_health_dashboard.py --json docs_health_ci.json
+
+      - name: Evaluate Documentation Health Score
+        run: |
+          python - <<'PY'
+          import json, sys
+          data = json.load(open('docs_health_ci.json'))
+          score = data.get('health_score', 0)
+          high = data.get('statistics', {}).get('high_issues', 0)
+          print(f"Health score: {score}")
+          print(f"High priority issues: {high}")
+          if score < 90:
+              print("::error ::Documentation health score below threshold (90)")
+              sys.exit(1)
+          if high > 0:
+              print("::error ::High priority documentation issues detected")
+              sys.exit(1)
+          PY
+
+      - name: Run Roadmap Linter
+        run: |
+          python autocoder_cc/tools/scripts/roadmap_lint.py --fail-on-errors 

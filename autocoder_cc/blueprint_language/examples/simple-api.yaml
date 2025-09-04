@@ -1,0 +1,39 @@
+metadata:
+  version: 1.0.0
+  author: Autocoder Examples
+  description: Simple REST API example
+  autocoder_version: 3.3.0
+  schema_version: "1.0"
+  natural_language_description: Create a simple REST API with user management endpoints
+
+system:
+  name: simple_api
+  description: REST API server with user management endpoints
+  version: 1.0.0
+  
+  components:
+    - name: user_api
+      type: APIEndpoint # DEPRECATED field retained for compatibility; roles derived from ports
+      # New port-based semantics (ADR-031)
+      ports:
+        response:
+          semantic_class: data_out
+          direction: output
+          data_schema:
+            id: schemas.api.APIResponse
+            version: 1
+          description: HTTP response data
+      # Legacy fields below kept for generator backward compatibility
+      inputs: [] # DEPRECATED
+      outputs: [] # DEPRECATED
+      processing_mode: stream
+      resources:
+        ports:
+          - port: 8080
+            protocol: HTTP
+            public: true
+      observability:
+        level: detailed
+      description: REST API server component exposing user endpoints
+      
+  bindings: [] 

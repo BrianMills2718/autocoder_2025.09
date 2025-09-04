@@ -1,0 +1,46 @@
+# Interface Repair Patterns for Self-Healing
+
+# Component constructor signature fixes
+EXPECTED_CONSTRUCTOR: def __init__(self, name: str, config: Dict[str, Any] = None):
+EXPECTED_SUPER_CALL: super().__init__(name, config)
+
+# Common constructor signature errors and fixes:
+ERROR_PATTERN: def __init__(self, config: dict):
+CORRECT_PATTERN: def __init__(self, name: str, config: Dict[str, Any] = None):
+
+ERROR_PATTERN: super().__init__("component_name", config)
+CORRECT_PATTERN: super().__init__(name, config)
+
+# Process item method signature
+EXPECTED_PROCESS_ITEM: async def process_item(self, item: Any) -> Any:
+
+# Communication method patterns
+COMMUNICATION_METHODS_REQUIRED:
+- async def send_to_component(self, target_component: str, data: Dict[str, Any], target_port: str = "input") -> Dict[str, Any]
+- async def query_component(self, target_component: str, query: Dict[str, Any], target_port: str = "query") -> Dict[str, Any]  
+- async def route_to_bindings(self, data: Dict[str, Any], source_port: str = "output") -> List[Dict[str, Any]]
+
+# Method availability checks
+METHODS_AVAILABLE_ON_BASE:
+- self.logger
+- self.metrics_collector  
+- self.tracer
+- self._status
+- self.handle_error()
+- self.send_to_component()
+- self.query_component()
+- self.route_to_bindings()
+
+# Type annotation fixes
+TYPE_FIXES:
+Dict: from typing import Dict
+Any: from typing import Any
+List: from typing import List
+Optional: from typing import Optional
+
+# Component name resolution patterns
+COMPONENT_NAME_PATTERNS:
+- API components: should end with "_api_endpoint" 
+- Store components: should end with "_store"
+- Controller components: should end with "_controller"
+- Generated class names: Generated{ComponentType}_{component_name}

@@ -1,0 +1,231 @@
+# Example Blueprint: Fraud Scorer Component
+# Demonstrates the blueprint language for a real component
+
+metadata:
+  version: "1.0.0"
+  author: "Autocoder 3.3"
+  description: "ML-based fraud scoring component with rule engine integration"
+  tags: ["fraud-detection", "ml", "scoring"]
+  autocoder_version: "3.3.0"
+  created: "2024-06-16T21:00:00Z"
+
+component:
+  name: "fraud_scorer"
+  type: "Model"
+  description: "Combines ML model predictions with rule-based scoring for fraud detection"
+  processing_mode: "hybrid"  # Batch when queue > 100, stream otherwise
+  
+  inputs:
+    - name: "transaction"
+      schema: "TransactionSchema"
+      required: true
+      description: "Transaction data for fraud scoring"
+      
+  outputs:
+    - name: "fraud_score"
+      schema: "FraudScoreSchema"
+      required: true
+      description: "Calculated fraud score and risk assessment"
+      
+  properties:
+    # Property validations - these become PropertyValidator rules
+    - constraint: "fraud_score >= 0.0 and fraud_score <= 1.0"
+      description: "Fraud score must be between 0 and 1"
+      severity: "error"
+      
+    - constraint: "risk_level in ['low', 'medium', 'high', 'critical']"
+      description: "Risk level must be valid"
+      severity: "error"
+      
+    - constraint: "model_version is not None"
+      description: "Model version must be specified"
+      severity: "error"
+      
+    - constraint: "scoring_timestamp is not None"
+      description: "Scoring timestamp must be present"
+      severity: "error"
+      
+  contracts:
+    # Contract validations - these become ContractValidator rules
+    - expression: "output.transaction_id == input.transaction.transaction_id"
+      description: "Transaction ID must be preserved"
+      
+    - expression: "output.user_id == input.transaction.user_id"
+      description: "User ID must be preserved"
+      
+  resources:
+    external_services:
+      - name: "ml_service"
+        endpoint: "grpc://localhost:50051"
+        protocol: "gRPC"
+        timeout_ms: 3000
+        
+      - name: "user_profile_service"
+        endpoint: "http://localhost:8080/api/v1/users"
+        protocol: "HTTP"
+        timeout_ms: 2000
+        
+  configuration:
+    # Component-specific config
+    batch_config:
+      max_batch_size: 100
+      max_wait_ms: 50
+      
+    rule_weights:
+      amount_velocity: 0.3
+      geographic_risk: 0.2
+      merchant_risk: 0.2
+      time_patterns: 0.15
+      account_age: 0.15
+      
+    risk_thresholds:
+      low: 0.3
+      medium: 0.5
+      high: 0.7
+      critical: 0.85
+      
+  dependencies:
+    - "ml_service"
+    - "user_profile_service"
+    - "grpc_channel"
+    - "http_session"
+    
+  implementation:
+    language: "python"
+    base_class: "Model"
+    imports:
+      - "from datetime import datetime"
+      - "import aiohttp"
+      - "import grpc"
+      
+    custom_logic: |
+      # Core fraud scoring logic
+      async def _score_transaction(self, transaction: Dict[str, Any]) -> Dict[str, Any]:
+          # Get ML model prediction
+          ml_features = self._extract_ml_features(transaction)
+          ml_prediction = await self._get_ml_prediction(ml_features)
+          
+          # Get rule-based scores
+          rule_scores = self._calculate_rule_scores(transaction)
+          
+          # Combine scores with weights
+          combined_score = self._combine_scores(ml_prediction, rule_scores)
+          
+          # Determine risk level
+          risk_level = self._determine_risk_level(combined_score)
+          
+          return {
+              'fraud_score': combined_score,
+              'risk_level': risk_level,
+              'model_version': 'v2.1.3',
+              'scoring_timestamp': datetime.now().isoformat(),
+              'transaction_id': transaction['transaction_id'],
+              'user_id': transaction['user_id'],
+              'ml_score': ml_prediction['score'],
+              'rule_scores': rule_scores,
+              'features_used': ml_features.keys()
+          }
+          
+    methods:
+      _extract_ml_features: |
+        def _extract_ml_features(self, transaction: Dict[str, Any]) -> Dict[str, float]:
+            # Extract features for ML model
+            features = {
+                'amount': float(transaction.get('amount', 0)),
+                'hour_of_day': datetime.fromisoformat(transaction['timestamp']).hour,
+                'merchant_category': self._encode_merchant_category(transaction.get('merchant_id')),
+                'user_velocity': self._get_user_velocity(transaction['user_id'])
+            }
+            return features
+            
+      _combine_scores: |
+        def _combine_scores(self, ml_pred: Dict, rule_scores: Dict) -> float:
+            # Weighted combination of ML and rule scores
+            ml_weight = 0.7
+            rule_weight = 0.3
+            
+            ml_score = ml_pred['score']
+            rule_score = sum(score * weight for score, weight in 
+                           zip(rule_scores.values(), self.rule_weights.values()))
+            
+            return ml_weight * ml_score + rule_weight * rule_score
+            
+  observability:
+    level: "detailed"
+    custom_metrics:
+      - name: "fraud_scores_generated"
+        type: "counter"
+        description: "Total number of fraud scores generated"
+        
+      - name: "fraud_score_distribution"
+        type: "histogram"
+        description: "Distribution of fraud scores generated"
+        
+      - name: "ml_service_calls"
+        type: "counter"
+        description: "Number of ML service calls made"
+        
+      - name: "profile_service_calls"
+        type: "counter"
+        description: "Number of user profile service calls"
+        
+      - name: "fallback_invocations"
+        type: "counter"
+        description: "Number of times fallback mechanisms were used"
+        
+    traces:
+      enabled: true
+      sample_rate: 1.0
+
+# Schema definitions used by this component
+schemas:
+  TransactionSchema:
+    type: "object"
+    required: ["transaction_id", "user_id", "amount", "timestamp"]
+    properties:
+      transaction_id:
+        type: "string"
+        pattern: "^txn_[a-zA-Z0-9]+$"
+      user_id:
+        type: "string"
+        pattern: "^user_[a-zA-Z0-9]+$"
+      amount:
+        type: "number"
+        minimum: 0.01
+      timestamp:
+        type: "string"
+        format: "date-time"
+      merchant_id:
+        type: "string"
+      currency:
+        type: "string"
+        pattern: "^[A-Z]{3}$"
+        
+  FraudScoreSchema:
+    type: "object"
+    required: ["fraud_score", "risk_level", "transaction_id", "scoring_timestamp"]
+    properties:
+      fraud_score:
+        type: "number"
+        minimum: 0.0
+        maximum: 1.0
+      risk_level:
+        type: "string"
+        enum: ["low", "medium", "high", "critical"]
+      transaction_id:
+        type: "string"
+      user_id:
+        type: "string"
+      scoring_timestamp:
+        type: "string"
+        format: "date-time"
+      model_version:
+        type: "string"
+      ml_score:
+        type: "number"
+      rule_scores:
+        type: "object"
+      features_used:
+        type: "array"
+        items:
+          type: "string"

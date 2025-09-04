@@ -1,0 +1,3 @@
+Make a detailed review of the config parameters in gemini-review. Carefully set up the parameters so that gemini-review is optimized to validatioe the claims you just made. Take the claims of success you just stated, add the full detail of these claims and all evidence for those claims under `claims_of_success:` in `gemini-review-tool/verification-review.yaml`, run `python gemini-review-tool/gemini_review.py --config gemini-review-tool/verification-review.yaml`, and report Gemini’s verdict back here. 
+
+Make sure to only include the files relevant to this review.

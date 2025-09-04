@@ -1,0 +1,133 @@
+# Gemini Phase 3 Validation Configuration
+# Validates implementation of Gemini Priority #1 Recommendation: Unified Data Models
+
+project_name: "Autocoder V5.2 - Phase 3 Unified Data Models Validation"
+project_path: "."
+
+# Output settings for Phase 3 validation
+output_format: "xml"
+output_file: "reports/validation/phase3-unified-models-review.md"
+keep_repomix: false
+
+# Focus on files we modified for unified data models
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "generated_systems"
+  - "reports"
+  - "*.json"
+  - "*.lock"
+  - "*.toml"
+  - "examples"
+  - "tests"
+
+# Key documentation for validation
+documentation_files:
+  - "./claims_phase3_unified_models.md"
+  - "./CLAUDE.md"
+  - "./reports/validation/claims_to_check/gemini-review.md"
+
+# Claims file for validation
+claims_file: "./claims_phase3_unified_models.md"
+
+# Specific claims about unified data model implementation
+claims_of_success: |
+  Based on claims_phase3_unified_models.md, validate these Phase 3 implementation claims:
+
+  **GEMINI PRIORITY #1 IMPLEMENTATION**:
+  1. Standardized configuration attribute - all components now use 'configuration' instead of mixed 'config'/'configuration'
+  2. Fixed LLM prompt instructions to use correct field names
+  3. Updated JSON schema examples that LLM references
+  4. Comprehensive codebase updates - all .config access changed to .configuration
+
+  **ARCHITECTURAL CONSISTENCY CLAIMS**:
+  5. IntermediateComponent.config → IntermediateComponent.configuration in intermediate_format.py
+  6. All LLM prompts updated in natural_language_to_blueprint.py
+  7. All JSON examples updated to use "configuration" field
+  8. All component access patterns updated across 6+ files
+
+  **FUNCTIONAL IMPROVEMENT CLAIMS**:
+  9. Eliminated Pydantic validation errors about config field mismatches
+  10. Phase 1 pipeline now completes successfully (27.6s generation time)
+  11. Self-healing system restored with consistent attribute access
+  12. No more 'object has no attribute' errors related to config/configuration
+
+  **ROOT CAUSE RESOLUTION CLAIMS**:
+  13. Addressed Gemini's "High Risk" inconsistent data models issue
+  14. Eliminated future attribute access bugs through standardization
+  15. Created consistent developer experience with single attribute name
+
+  Please examine the actual code changes and verify each claim against implemented solutions.
+
+# Custom validation prompt for Phase 3 assessment
+custom_prompt: |
+  You are conducting a follow-up technical review to validate the implementation of Gemini's Priority #1 recommendation: "Unify Data Models."
+
+  **CONTEXT**: In the previous review, you identified "Inconsistent Data Models" as a HIGH RISK issue where different component types used different attribute names (`config` vs `configuration`), causing recurring bugs and technical debt.
+
+  **PRIMARY VALIDATION OBJECTIVES**:
+  1. **Consistency Verification**: Confirm all components now use a single, consistent attribute name
+  2. **Implementation Completeness**: Verify all code locations were updated (no missed references)
+  3. **LLM Alignment**: Ensure prompts and examples guide LLM to generate correct structure
+  4. **Root Cause Resolution**: Assess whether the fundamental issue has been eliminated
+
+  **SPECIFIC TECHNICAL VALIDATION**:
+
+  **A. Data Model Consistency**:
+  - Check IntermediateComponent definition in intermediate_format.py
+  - Verify ParsedComponent uses same field name in system_blueprint_parser.py
+  - Look for any remaining inconsistencies between component types
+
+  **B. LLM Integration Consistency**:
+  - Examine system prompts in natural_language_to_blueprint.py
+  - Check JSON schema examples that LLM uses as reference
+  - Verify manual component creation uses correct field names
+
+  **C. Codebase Update Completeness**:
+  - Scan for any remaining .config access on IntermediateComponent objects
+  - Check component access patterns in translator, validator, healer files
+  - Identify any missed conversion locations
+
+  **D. Functional Impact Assessment**:
+  - Evaluate whether the changes resolve the Pydantic validation errors
+  - Assess impact on system pipeline functionality
+  - Determine if self-healing and validation systems work consistently
+
+  **CRITICAL SUCCESS CRITERIA**:
+  - **Zero Inconsistencies**: No mixed usage of config/configuration attributes
+  - **Complete Implementation**: All relevant files updated with no missed locations
+  - **LLM Alignment**: Prompts and examples use correct field names
+  - **Functional Validation**: System demonstrates improved behavior
+
+  **RISK ASSESSMENT**: 
+  Look for:
+  - Partial implementations that could cause future bugs
+  - Areas where inconsistencies might still exist
+  - Potential for regression to old patterns
+
+  **DELIVERABLES**:
+  1. **Implementation Verification Table**: VERIFIED/PARTIAL/FAILED for each claimed change
+  2. **Consistency Assessment**: Rate the overall data model consistency (Perfect/Good/Partial/Poor)
+  3. **Risk Mitigation**: Assess how well this addresses the original "High Risk" issue
+  4. **Future-Proofing**: Evaluate likelihood of preventing similar bugs in the future
+
+  Focus on evidence-based validation with specific file/line references.
+
+# Use unified models validation template
+review_templates:
+  unified_models_validation:
+    prompt: "Validation of unified data models implementation addressing Gemini Priority #1"
+    focus: 
+      - "data_model_consistency"
+      - "implementation_completeness"  
+      - "root_cause_resolution"
+      - "architectural_improvement"

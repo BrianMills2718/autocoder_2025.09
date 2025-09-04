@@ -1,0 +1,353 @@
+name: Enterprise Production Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  hardcoded-value-detection:
+    runs-on: ubuntu-latest
+    name: Hardcoded Value Detection
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run validation scanner
+      id: validation
+      run: |
+        echo "Running enterprise validation scanner..."
+        python tools/validation_scanner.py . \
+          --output validation_report.json \
+          --format json \
+          --verbose
+        
+        # Extract metrics for reporting
+        TOTAL_ISSUES=$(python -c "import json; data=json.load(open('validation_report.json')); print(data['total_issues_found'])")
+        CRITICAL_ISSUES=$(python -c "import json; data=json.load(open('validation_report.json')); print(data['issues_by_severity'].get('critical', 0))")
+        HIGH_ISSUES=$(python -c "import json; data=json.load(open('validation_report.json')); print(data['issues_by_severity'].get('high', 0))")
+        VALIDATION_SCORE=$(python -c "import json; data=json.load(open('validation_report.json')); print(data['validation_score'])")
+        
+        echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+        echo "critical_issues=$CRITICAL_ISSUES" >> $GITHUB_OUTPUT
+        echo "high_issues=$HIGH_ISSUES" >> $GITHUB_OUTPUT
+        echo "validation_score=$VALIDATION_SCORE" >> $GITHUB_OUTPUT
+        
+        # Create JUnit XML report for CI integration
+        python tools/validation_pipeline.py \
+          --input validation_report.json \
+          --output validation_results.xml \
+          --format junit
+        
+    - name: Upload validation report
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-report
+        path: |
+          validation_report.json
+          validation_results.xml
+        retention-days: 30
+        
+    - name: Generate validation HTML report
+      run: |
+        python tools/validation_scanner.py . \
+          --output validation_report.html \
+          --format html
+          
+    - name: Upload HTML report
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-html-report
+        path: validation_report.html
+        retention-days: 30
+        
+    - name: Comment PR with validation results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const totalIssues = '${{ steps.validation.outputs.total_issues }}';
+          const criticalIssues = '${{ steps.validation.outputs.critical_issues }}';
+          const highIssues = '${{ steps.validation.outputs.high_issues }}';
+          const validationScore = '${{ steps.validation.outputs.validation_score }}';
+          
+          const scoreEmoji = validationScore >= 90 ? '🟢' : validationScore >= 70 ? '🟡' : '🔴';
+          const statusEmoji = criticalIssues === '0' ? '✅' : '❌';
+          
+          const comment = `## ${statusEmoji} Enterprise Validation Results ${scoreEmoji}
+          
+          **Validation Score:** ${validationScore}/100
+          
+          ### Issue Summary
+          - **Total Issues:** ${totalIssues}
+          - **Critical Issues:** ${criticalIssues} ${criticalIssues === '0' ? '✅' : '❌'}
+          - **High Priority Issues:** ${highIssues}
+          
+          ### Status
+          ${criticalIssues === '0' ? 
+            '✅ **PASSED** - No critical issues detected' : 
+            '❌ **FAILED** - Critical issues found that must be resolved'}
+          
+          📄 Download detailed reports from the artifacts section.
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+    
+    - name: Fail on critical issues
+      if: steps.validation.outputs.critical_issues != '0'
+      run: |
+        echo "❌ Validation failed: ${{ steps.validation.outputs.critical_issues }} critical issues found"
+        echo "Critical issues must be resolved before merging"
+        exit 1
+        
+    - name: Create validation summary
+      run: |
+        echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Total Issues:** ${{ steps.validation.outputs.total_issues }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Critical Issues:** ${{ steps.validation.outputs.critical_issues }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Validation Score:** ${{ steps.validation.outputs.validation_score }}/100" >> $GITHUB_STEP_SUMMARY
+
+  component-architecture-validation:
+    runs-on: ubuntu-latest
+    name: Component Architecture Validation
+    needs: hardcoded-value-detection
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run AST validation
+      run: |
+        echo "Running AST-based component validation..."
+        python -c "
+        from autocoder.validation.ast_analyzer import ASTValidationRuleEngine
+        from pathlib import Path
+        import json
+        
+        engine = ASTValidationRuleEngine()
+        results = []
+        
+        # Scan all Python files
+        for py_file in Path('.').rglob('*.py'):
+          if 'venv' in str(py_file) or '__pycache__' in str(py_file):
+            continue
+          try:
+            issues = engine.validate_file(str(py_file))
+            if issues:
+              results.extend(issues)
+          except Exception as e:
+            print(f'Error scanning {py_file}: {e}')
+        
+        # Save results
+        with open('ast_validation.json', 'w') as f:
+          json.dump({'issues': len(results), 'details': results}, f, indent=2)
+        
+        print(f'AST validation complete. Found {len(results)} issues.')
+        "
+        
+    - name: Upload AST validation results
+      uses: actions/upload-artifact@v3
+      with:
+        name: ast-validation-results
+        path: ast_validation.json
+        retention-days: 30
+
+  generated-component-validation:
+    runs-on: ubuntu-latest
+    name: Generated Component Validation
+    needs: component-architecture-validation
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Test component generation
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        echo "Testing component generation and validation..."
+        python -c "
+        from blueprint_language.llm_component_generator import LLMComponentGenerator
+        from autocoder.components.component_registry import ComponentRegistry
+        import tempfile
+        import os
+        
+        # FAIL FAST - LLM is REQUIRED
+        if not os.getenv('OPENAI_API_KEY'):
+          print('❌ CRITICAL: OPENAI_API_KEY not available')
+          print('System CANNOT function without LLM.')
+          print('Set OPENAI_API_KEY in GitHub Secrets.')
+          exit(1)  # FAIL the workflow
+        
+        try:
+          generator = LLMComponentGenerator()
+          registry = ComponentRegistry()
+          
+          # Test simple component generation
+          spec = {
+            'name': 'TestProcessor',
+            'type': 'transformer',
+            'description': 'Simple test processor for CI validation'
+          }
+          
+          result = generator.generate_component(spec)
+          
+          # Validate the generated component
+          with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as tmp:
+            tmp.write(result['component_code'])
+            tmp.flush()
+            
+            validation_result = registry.validate_component_file(tmp.name)
+            
+          # Save results
+          import json
+          with open('generation_test.json', 'w') as f:
+            json.dump({
+              'status': 'success',
+              'component_generated': bool(result.get('component_code')),
+              'validation_passed': validation_result.get('valid', False),
+              'issues': validation_result.get('issues', [])
+            }, f, indent=2)
+            
+          print('✅ Component generation test passed')
+          
+        except Exception as e:
+          import json
+          with open('generation_test.json', 'w') as f:
+            json.dump({
+              'status': 'failed',
+              'error': str(e)
+            }, f, indent=2)
+          print(f'❌ Component generation test failed: {e}')
+        "
+        
+    - name: Upload generation test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: generation-test-results
+        path: generation_test.json
+        retention-days: 30
+
+  validation-summary:
+    runs-on: ubuntu-latest
+    name: Validation Summary
+    needs: [hardcoded-value-detection, component-architecture-validation, generated-component-validation]
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Generate comprehensive summary
+      run: |
+        echo "# Enterprise Validation Summary" > validation_summary.md
+        echo "" >> validation_summary.md
+        echo "## Validation Pipeline Results" >> validation_summary.md
+        echo "" >> validation_summary.md
+        
+        # Process validation report if available
+        if [ -f validation-report/validation_report.json ]; then
+          echo "### Hardcoded Value Detection" >> validation_summary.md
+          python -c "
+          import json
+          try:
+            with open('validation-report/validation_report.json') as f:
+              data = json.load(f)
+            print(f'- **Files Scanned:** {data[\"total_files_scanned\"]}')
+            print(f'- **Issues Found:** {data[\"total_issues_found\"]}')
+            print(f'- **Validation Score:** {data[\"validation_score\"]}/100')
+            print(f'- **Critical Issues:** {data[\"issues_by_severity\"].get(\"critical\", 0)}')
+            print(f'- **High Issues:** {data[\"issues_by_severity\"].get(\"high\", 0)}')
+          except Exception as e:
+            print(f'Error processing validation report: {e}')
+          " >> validation_summary.md
+        fi
+        
+        echo "" >> validation_summary.md
+        echo "### Component Architecture Validation" >> validation_summary.md
+        
+        # Process AST validation if available
+        if [ -f ast-validation-results/ast_validation.json ]; then
+          python -c "
+          import json
+          try:
+            with open('ast-validation-results/ast_validation.json') as f:
+              data = json.load(f)
+            print(f'- **AST Issues Found:** {data[\"issues\"]}')
+          except Exception as e:
+            print(f'Error processing AST validation: {e}')
+          " >> validation_summary.md
+        fi
+        
+        echo "" >> validation_summary.md
+        echo "### Generated Component Validation" >> validation_summary.md
+        
+        # Process generation test if available
+        if [ -f generation-test-results/generation_test.json ]; then
+          python -c "
+          import json
+          try:
+            with open('generation-test-results/generation_test.json') as f:
+              data = json.load(f)
+            print(f'- **Generation Status:** {data[\"status\"]}')
+            if data[\"status\"] == \"success\":
+              print(f'- **Component Generated:** {data[\"component_generated\"]}')
+              print(f'- **Validation Passed:** {data[\"validation_passed\"]}')
+          except Exception as e:
+            print(f'Error processing generation test: {e}')
+          " >> validation_summary.md
+        fi
+        
+        echo "" >> validation_summary.md
+        echo "---" >> validation_summary.md
+        echo "*Generated by Enterprise Validation Pipeline*" >> validation_summary.md
+        
+        cat validation_summary.md
+        
+    - name: Upload validation summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-summary
+        path: validation_summary.md
+        retention-days: 30

@@ -1,0 +1,23 @@
+IMPORT POLICY: Components use shared modules, no individual imports needed
+
+SHARED MODULES AUTOMATICALLY AVAILABLE:
+- observability.py: ComposedComponent, StandaloneMetricsCollector, StandaloneTracer, get_logger
+- communication.py: ComponentCommunicator, ComponentRegistry, MessageEnvelope
+
+CRITICAL: DO NOT GENERATE IMPORT STATEMENTS
+- The system automatically provides shared modules
+- Your component inherits from ComposedComponent
+- All required classes are available via inheritance or injection
+
+CORRECT APPROACH:
+✓ class GeneratedComponentType_component_name(ComposedComponent):
+✓ Use self.logger, self.metrics_collector, self.tracer from parent
+✓ Use self.send_to_component(), self.query_component() for communication
+
+WRONG APPROACH:
+✗ from observability import ComposedComponent
+✗ from communication import ComponentCommunicator
+✗ from typing import Dict, Any
+✗ import asyncio, json, etc.
+
+The component wrapper will add all necessary boilerplate and imports.

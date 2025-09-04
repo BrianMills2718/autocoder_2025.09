@@ -1,0 +1,118 @@
+# Gemini Claims Validation Configuration
+# Specifically designed to validate our component registry fix claims
+
+project_name: "Autocoder V5.2 - Component Registry Fixes Validation"
+project_path: "."
+
+# Output settings for claims validation
+output_format: "xml"
+output_file: "reports/validation/claims-validation-review.md"
+keep_repomix: false
+
+# Focus on specific files we modified
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "generated_systems"
+  - "reports"
+  - "*.json"
+  - "*.lock"
+  - "*.toml"
+  - "examples"
+  - "tests"
+
+# Key documentation for validation
+documentation_files:
+  - "./claims_to_check.md"
+  - "./CLAUDE.md"
+
+# Claims file for validation
+claims_file: "./claims_to_check.md"
+
+# Specific claims to validate against the codebase
+claims_of_success: |
+  Based on the claims in claims_to_check.md, validate these specific technical claims:
+
+  **CORE ATTRIBUTE ACCESS FIXES**:
+  1. ParsedComponent configuration access fixed by changing comp.config to comp.configuration in system_generator.py:835
+  2. IntermediateComponent configuration access fixed in multiple files by changing .configuration to .config
+  3. ParsedBinding stream_name attribute fixed by using correct binding attributes
+
+  **COMPONENT REGISTRY ENHANCEMENTS**:
+  4. StreamProcessor and Controller component types added to component registry
+  5. Validation rules added for new component types
+  6. Component registry now supports 8 component types instead of 6
+
+  **ENTERPRISE POLICY IMPLEMENTATION**:
+  7. Policy block generation added to intermediate_to_blueprint_translator.py
+  8. ParsedSystemBlueprint updated to include policy field
+  9. SystemBlueprintParser updated to read policy blocks
+  10. SystemGenerator updated to preserve policy in validation
+
+  **PIPELINE FUNCTIONALITY**:
+  11. System now completes Phase 1 (Natural Language → Blueprint YAML) successfully
+  12. System generates multi-component architectures with proper bindings
+  13. Self-healing system continues to work correctly
+
+  Please examine the actual code changes and verify each claim is accurately implemented.
+
+# Custom validation prompt focused on technical verification
+custom_prompt: |
+  You are conducting a technical code review to validate specific claims about fixes made to the Autocoder V5.2 system.
+
+  **PRIMARY OBJECTIVES**:
+  1. **Code Verification**: Examine the actual code changes claimed in claims_to_check.md
+  2. **Technical Accuracy**: Verify each technical claim against the implemented code
+  3. **Fix Completeness**: Assess whether the fixes address the root causes of the original errors
+  4. **Implementation Quality**: Evaluate the quality and correctness of the implemented solutions
+
+  **SPECIFIC VALIDATION AREAS**:
+
+  **A. Attribute Access Fixes**:
+  - Check system_generator.py:835 for comp.config → comp.configuration change
+  - Verify intermediate_to_blueprint_translator.py changes for .config vs .configuration
+  - Confirm ParsedBinding attribute usage in system_generator.py
+  - Look for any remaining attribute access inconsistencies
+
+  **B. Component Registry Enhancements**:
+  - Verify StreamProcessor and Controller are registered in component_registry.py
+  - Check that validation rules exist for new component types
+  - Confirm the available component types list is expanded
+
+  **C. Policy Block Implementation**:
+  - Verify _generate_default_policy method exists in intermediate_to_blueprint_translator.py
+  - Check ParsedSystemBlueprint has policy field in system_blueprint_parser.py
+  - Confirm SystemGenerator includes policy in blueprint_dict
+  - Validate the policy structure matches enterprise requirements
+
+  **D. Error Pattern Analysis**:
+  - Look for patterns that could cause similar attribute errors in the future
+  - Assess the robustness of the fixes
+  - Identify any remaining technical debt or inconsistencies
+
+  **DELIVERABLES**:
+  1. **Claim Verification Table**: For each claim, provide VERIFIED/UNVERIFIED/PARTIAL with evidence
+  2. **Code Quality Assessment**: Rate the implementation quality of each fix
+  3. **Risk Analysis**: Identify any remaining issues or potential problems
+  4. **Recommendations**: Suggest any additional improvements or safeguards
+
+  Focus on technical accuracy and provide specific file/line references for your findings.
+
+# Use enterprise validation template
+review_templates:
+  claims_validation:
+    prompt: "Technical validation of specific code fix claims with evidence-based verification"
+    focus: 
+      - "code_verification"
+      - "technical_accuracy"
+      - "fix_completeness"
+      - "implementation_quality"

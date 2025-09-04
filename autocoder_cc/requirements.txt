@@ -1,0 +1,40 @@
+# Autocoder 5.2.0 Dependencies
+
+# Core structured concurrency and communication
+anyio>=4.0.0
+
+# Component generation and validation
+pydantic>=2.5.0
+pyyaml>=6.0
+python-dotenv>=0.21.0
+
+# HTTP frameworks for API components
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+httpx>=0.25.0
+
+# Database connections for Store components
+databases[postgresql]>=0.8.0
+asyncpg>=0.28.0
+
+# Redis connections for Accumulator components
+redis[hiredis]>=5.0.0
+
+# Testing infrastructure
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Schema validation
+jsonschema>=4.20.0
+
+# Development utilities
+black>=23.0.0
+ruff>=0.1.0
+
+# LLM integrations
+openai>=1.0.0
+anthropic>=0.18.0
+
+pydantic-settings>=2.0.0
+
+aio-pika>=9.3.0

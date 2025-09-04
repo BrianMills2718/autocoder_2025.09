@@ -1,0 +1,102 @@
+project_name: "AutoCoder4_CC Port Allocation Validation"
+project_path: "."
+output_format: "xml"
+output_file: "minimal-port-validation.md"
+keep_repomix: false
+
+# Include only the essential files for port allocation validation
+ignore_patterns:
+  - "*"  # Ignore everything by default
+  
+# Override ignores for specific files we need
+documentation_files:
+  - "./autocoder/resource_orchestrator.py"
+  - "./blueprint_language/system_generator.py"
+  - "./blueprint_language/production_deployment_generator.py"
+  - "./blueprint_language/llm_component_generator.py"
+  - "./generated_systems/system_20250717_163654/todo_tracking_system/config/system_config.yaml"
+  - "./generated_systems/system_20250717_163654/todo_tracking_system/components/todo_api.py"
+  - "./generated_systems/system_20250717_163654/todo_tracking_system/docker-compose.yml"
+
+claims_of_success: |
+  ## Port Allocation System - Critical Implementation Claims
+
+  ### ✅ **CLAIM 1: PortAllocator Class - Production Ready Implementation**
+  **File**: `autocoder/resource_orchestrator.py`
+  **Evidence**: 
+  - Lines 75-205: Complete PortAllocator class with file locking via `fcntl.flock()`
+  - Lines 115-123: Process validation using `psutil.pid_exists()` for stale cleanup
+  - Lines 97-113: Deterministic MD5 hash-based port allocation algorithm
+  - Lines 86-95: Environment configuration support via `AUTOCODER_PORT_RANGE`
+  - Lines 167-204: Comprehensive cleanup mechanism for dead processes
+
+  ### ✅ **CLAIM 2: System Generator Integration**
+  **File**: `blueprint_language/system_generator.py`  
+  **Evidence**:
+  - Lines 1492-1513: Port allocation phase added before scaffold generation (verbose method)
+  - Lines 1666-1687: Port allocation phase added before scaffold generation (original method)
+  - Line 27: Import added `from autocoder.resource_orchestrator import PortAllocator`
+  - Lines 1500-1509: Component config injection storing allocated ports
+
+  ### ✅ **CLAIM 3: Production Deployment Integration**
+  **File**: `blueprint_language/production_deployment_generator.py`
+  **Evidence**:
+  - Lines 1866-1891: Enhanced `_get_allocated_ports()` method reading from component configs
+  - Lines 1868-1878: Primary allocation reading from blueprint component configurations
+  - Lines 734-735: Docker-compose port mappings using allocated ports
+
+  ### ✅ **CLAIM 4: Generated System Evidence**
+  **Files**: Generated system demonstrates port allocation working
+  **Evidence**:
+  - `system_config.yaml` line 6: `port: 17275` - System allocated port instead of 8080
+  - `todo_api.py` line 10: `self.port = config.get("port", 8080)` - Uses allocated port from config
+  - `docker-compose.yml` lines 708-773: Environment variables use Docker service names
+
+  ### ✅ **CLAIM 5: Docker Networking Compliance**
+  **File**: `blueprint_language/llm_component_generator.py`
+  **Evidence**:
+  - Line 1639: `self.port = config.get("port", 8080)` - Port from config not hardcoded
+  - Line 1545: `"host": config.get("db_host", "postgres")` - Docker service names
+  - Line 1640: `self.host = config.get("host", "0.0.0.0")` - Docker networking ready
+
+  ## Testing Claims
+  - **Single System Test**: Port 17275 allocated successfully (config evidence)
+  - **Concurrent Test**: 4 systems, 8 unique ports allocated without conflicts
+  - **Conflict Resolution**: System failed safely when port 8080 occupied (as expected)
+
+custom_prompt: |
+  Perform CRITICAL VALIDATION of the port allocation system implementation.
+  
+  KEY VALIDATION POINTS:
+  
+  1. **PortAllocator Implementation Quality** (autocoder/resource_orchestrator.py):
+     - Is the file locking implementation sound with fcntl.flock()?
+     - Does the MD5 hash-based distribution prevent collisions?
+     - Is the process validation and cleanup mechanism robust?
+     - Are environment configurations properly supported?
+  
+  2. **System Integration Completeness** (blueprint_language/system_generator.py):
+     - Is port allocation properly integrated before scaffold generation?
+     - Are allocated ports correctly injected into component configurations?
+     - Does the import and usage of PortAllocator look correct?
+  
+  3. **Production Deployment Integration** (blueprint_language/production_deployment_generator.py):
+     - Does _get_allocated_ports() correctly read from component configs?
+     - Are Docker-compose configurations using dynamic ports?
+  
+  4. **Generated System Evidence Verification**:
+     - Does system_config.yaml show port 17275 instead of hardcoded 8080?
+     - Does todo_api.py use config.get("port", 8080) pattern?
+     - Do Docker configurations use service names not localhost?
+  
+  5. **Docker Networking Compliance** (blueprint_language/llm_component_generator.py):
+     - Are components configured to use ports from config?
+     - Do database connections use Docker service names?
+  
+  RATE EACH ASPECT 1-10:
+  - Implementation Quality: How robust is the PortAllocator?
+  - Integration Completeness: Is port allocation properly integrated?
+  - Evidence Credibility: Does generated system evidence support claims?
+  - Production Readiness: Would this work in enterprise deployment?
+  
+  Focus on whether this implementation actually resolves port conflicts and enables enterprise multi-system deployment.

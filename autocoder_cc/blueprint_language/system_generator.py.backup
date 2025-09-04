@@ -1,0 +1,2233 @@
+#!/usr/bin/env python3
+"""
+System Generator - Two-Phase Generation Orchestrator
+Coordinates scaffold generation and component logic generation to create complete systems
+"""
+import os
+import shutil
+import time
+import asyncio
+import requests
+import json
+import hashlib
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
+
+# Phase 2B: Import centralized timeout management
+from autocoder_cc.core.timeout_manager import get_timeout_manager, TimeoutType, TimeoutError
+
+from .system_blueprint_parser import SystemBlueprintParser, ParsedSystemBlueprint
+from .system_scaffold_generator import SystemScaffoldGenerator, GeneratedScaffold
+from .component_logic_generator import ComponentLogicGenerator, GeneratedComponent
+from .healing_integration import HealingIntegratedGenerator
+# Lazy import to avoid circular dependency - imported in methods that need it
+from .production_deployment_generator import ProductionDeploymentGenerator, GeneratedDeployment
+from .verbose_logger import VerboseLogger, GenerationStepContext
+from autocoder_cc.components.component_registry import component_registry
+from autocoder_cc.observability import get_logger, get_metrics_collector, get_tracer
+from tests.contracts.blueprint_structure_contract import BlueprintContract
+from autocoder_cc.resource_orchestrator import ResourceOrchestrator
+from autocoder_cc.recipes import RecipeExpander
+
+# Phase 1 integration imports (removed dead CQRS imports)
+from autocoder_cc.core.schema_versioning import generate_schema_artifacts
+
+# Import refactored modules
+from .system_generation import (
+    BenchmarkCollectionError,
+    SourceValidationError,
+    SourceValidationResult,
+    LiveBenchmarkData,
+    EvidenceBasedAnalysis,
+    SystemRequirements,
+    LiveIndustryBenchmarkCollector,
+)
+
+# VR1 Validation imports
+from autocoder_cc.blueprint_validation.migration_engine import VR1ValidationCoordinator
+from autocoder_cc.core.config import settings
+
+# Import emergency refactored modules
+from .system_generation.benchmark_collector import LiveIndustryBenchmarkCollector_LEGACY
+from .system_generation.decision_audit import DecisionAudit, TransparentAnalysis
+from .system_generation.messaging_analyzer import (
+    EvidenceBasedMessagingAnalyzer,
+    TransparentMessagingAnalyzer, 
+    MessagingRequirementsAnalyzer
+)
+from .system_generation.validation_orchestrator import ValidationOrchestrator
+
+
+# Classes have been extracted to system_generation module for better organization
+
+
+@dataclass
+class GeneratedSystem:
+    """Complete generated system"""
+    name: str
+    scaffold: GeneratedScaffold
+    components: List[GeneratedComponent]
+    tests: List[Any]  # PropertyTestSuite objects - using Any to avoid circular import
+    deployment: GeneratedDeployment
+    output_directory: Path
+    
+
+class SystemGenerator:
+    """
+    Two-phase system generator that creates complete, working systems.
+    
+    Phase 1: System Scaffold Generation
+    - Generates main.py with SystemExecutionHarness setup
+    - Creates configuration files and infrastructure
+    - Handles component registration and connections
+    
+    Phase 2: Component Logic Generation  
+    - Generates harness-compatible component implementations
+    - Uses highly constrained patterns for queue-based communication
+    - Ensures all components follow lifecycle methods
+    
+    This replaces the old single-phase generation approach with a more
+    reliable, testable, and maintainable two-phase approach.
+    """
+    
+    def __init__(self, output_dir: Path, verbose_logging: bool = True, timeout: Optional[int] = None, skip_deployment: bool = False):
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.timeout = None  # No timeout
+        
+        # Initialize verbose logging
+        self.verbose_logging = verbose_logging
+        if verbose_logging:
+            log_file = self.output_dir / "generation_verbose.log"
+            self.logger = VerboseLogger(log_file, console_level="INFO", file_level="DEBUG")
+        else:
+            self.logger = None
+        
+        # Initialize observability stack (Enterprise Roadmap v3 Phase 1)
+        self.structured_logger = get_logger("system_generator", component="SystemGenerator")
+        self.metrics_collector = get_metrics_collector("system_generator")
+        self.tracer = get_tracer("system_generator")
+        
+        # Initialize resource orchestrator for centralized resource management
+        self.resource_orchestrator = ResourceOrchestrator()
+        
+        # Store flags
+        self.skip_deployment = skip_deployment
+        
+        # Initialize sub-generators
+        self.scaffold_generator = SystemScaffoldGenerator(self.output_dir / "scaffolds")
+        # Use healing integration instead of direct component generator
+        self.healing_integration = HealingIntegratedGenerator(
+            output_dir=self.output_dir / "scaffolds",
+            strict_validation=True,  # ALWAYS strict validation
+            max_healing_attempts=3,  # ALWAYS attempt healing
+            enable_metrics=True
+        )
+        # Keep component generator for compatibility (import generation, etc.)
+        self.component_generator = ComponentLogicGenerator(self.output_dir / "scaffolds")
+        # Use lazy import to avoid circular dependency
+        from autocoder_cc.generation.property_test_generator import PropertyTestGenerator
+        self.test_generator = PropertyTestGenerator(self.output_dir)
+        self.deployment_generator = ProductionDeploymentGenerator(self.output_dir / "deployments")
+        
+        # Initialize emergency refactored modules
+        self.validation_orchestrator = ValidationOrchestrator()
+        
+        # Initialize recipe expander for blueprint recipe expansion
+        self.recipe_expander = RecipeExpander()
+        
+        self.structured_logger.info(
+            "SystemGenerator initialized with observability stack",
+            operation="init",
+            tags={"output_dir": str(output_dir), "verbose_logging": verbose_logging, "timeout": timeout}
+        )
+    
+    async def generate_system_with_timeout(self, *args, **kwargs):
+        """
+        Generate system with centralized timeout management to prevent hanging
+        
+        Phase 2B Enhancement: Uses centralized timeout manager instead of direct asyncio.wait_for
+        """
+        try:
+            self.structured_logger.info("🚀 Starting system generation with centralized timeout", 
+                                      operation="generate_system_with_timeout",
+                                      tags={"timeout": self.timeout})
+            
+            # Phase 2B: Use centralized timeout management for system generation
+            timeout_manager = get_timeout_manager()
+            operation_id = f"system_generation_{int(time.time() * 1000)}"
+            
+            # Use COMPONENT_GENERATION timeout type as it covers full system generation
+            return await timeout_manager.run_with_timeout(
+                operation=lambda: self.generate_system(*args, **kwargs),
+                operation_id=operation_id,
+                timeout_type=TimeoutType.COMPONENT_GENERATION,
+                custom_timeout=self.timeout  # Use configured timeout if provided
+            )
+                
+        except TimeoutError as e:
+            self.structured_logger.error(f"System generation timed out after {e.elapsed_time:.2f} seconds (limit: {e.timeout_value}s)",
+                                       operation="timeout_error",
+                                       tags={"timeout": e.timeout_value, "elapsed": e.elapsed_time})
+            raise RuntimeError(f"Generation timeout after {e.elapsed_time:.2f}s (limit: {e.timeout_value}s) - check for infinite loops")
+        
+    async def generate_system(self, blueprint_file: Path) -> GeneratedSystem:
+        """Generate complete system from blueprint file"""
+        
+        with self.tracer.span("system_generation.from_file", tags={"blueprint_file": str(blueprint_file)}) as span_id:
+            start_time = time.time()
+            
+            self.structured_logger.info(
+                "Starting system generation from file",
+                operation="generate_system",
+                tags={"blueprint_file": str(blueprint_file)}
+            )
+            
+            try:
+                # Parse the blueprint
+                parser = SystemBlueprintParser()
+                system_blueprint = parser.parse_file(blueprint_file)
+                
+                result = await self._generate_system_from_blueprint(system_blueprint)
+                
+                # Record successful generation metrics
+                generation_time = (time.time() - start_time) * 1000
+                self.metrics_collector.record_system_generated()
+                self.metrics_collector.record_generation_time(generation_time)
+                
+                self.structured_logger.info(
+                    "System generation completed successfully",
+                    operation="generate_system_complete",
+                    metrics={"generation_time_ms": generation_time},
+                    tags={"system_name": result.name}
+                )
+                
+                return result
+                
+            except Exception as e:
+                # Record error metrics
+                self.metrics_collector.record_error(e.__class__.__name__)
+                
+                self.structured_logger.error(
+                    "System generation failed",
+                    error=e,
+                    operation="generate_system_error",
+                    tags={"blueprint_file": str(blueprint_file)}
+                )
+                
+                if span_id:
+                    self.tracer.add_span_log(span_id, f"Generation error: {e}", "error")
+                
+                raise
+    
+    async def generate_system_from_yaml(self, blueprint_yaml: str) -> GeneratedSystem:
+        """Generate complete system from YAML string"""
+        
+        # Parse the blueprint
+        parser = SystemBlueprintParser()
+        system_blueprint = parser.parse_string(blueprint_yaml)
+        
+        return await self._generate_system_from_blueprint(system_blueprint)
+    
+    async def _generate_system_from_blueprint(self, system_blueprint: ParsedSystemBlueprint) -> GeneratedSystem:
+        """Generate system from parsed blueprint"""
+        
+        system_name = system_blueprint.system.name
+        
+        if self.logger:
+            with GenerationStepContext(self.logger, "system_generation", f"Generate System: {system_name}",
+                                     system_name=system_name, 
+                                     component_count=len(system_blueprint.system.components),
+                                     binding_count=len(system_blueprint.system.bindings)):
+                result = await self._generate_system_with_logging(system_blueprint)
+            # Finalize session AFTER the context manager exits
+            self.logger.finalize_session()
+            return result
+        else:
+            # Fallback to original logging
+            return await self._generate_system_original(system_blueprint)
+    
+    async def _generate_system_with_logging(self, system_blueprint: ParsedSystemBlueprint) -> GeneratedSystem:
+        """Generate system with verbose logging"""
+        # Import settings locally to avoid scope issues
+        from autocoder_cc.core.config import settings
+        
+        system_name = system_blueprint.system.name
+        
+        # Log blueprint details
+        self.logger.logger.info(f"🚀 Generating system: {system_name}")
+        self.logger.logger.info(f"📋 Blueprint details:")
+        self.logger.logger.info(f"   - Components: {len(system_blueprint.system.components)}")
+        self.logger.logger.info(f"   - Bindings: {len(system_blueprint.system.bindings)}")
+        self.logger.logger.info(f"   - Version: {system_blueprint.system.version}")
+        
+        # Pre-Generation Validation
+        with GenerationStepContext(self.logger, "pre_validation", "Pre-Generation Validation"):
+            validation_errors = self.validation_orchestrator._validate_pre_generation(system_blueprint)
+            self.logger.log_validation_result("pre_generation", {
+                "success": len(validation_errors) == 0,
+                "errors": validation_errors,
+                "total_errors": len(validation_errors)
+            })
+            
+            if validation_errors:
+                raise ValueError(f"Blueprint validation failed with {len(validation_errors)} errors")
+        
+        # VR1 Boundary-Termination Validation (if enabled)
+        if settings.ENABLE_VR1_VALIDATION:
+            with GenerationStepContext(self.logger, "vr1_validation", "VR1 Boundary-Termination Validation"):
+                try:
+                    vr1_coordinator = VR1ValidationCoordinator()
+                    success, actions, migrated_blueprint = vr1_coordinator.validate_with_vr1_coordination(
+                        system_blueprint,
+                        force_vr1=settings.FORCE_VR1_COMPLIANCE
+                    )
+                    
+                    vr1_result = {
+                        "success": success,
+                        "migration_applied": len(actions) > 0,
+                        "actions_taken": [str(action) for action in actions],
+                        "enforcement_mode": settings.VR1_ENFORCEMENT_MODE
+                    }
+                    
+                    self.logger.log_validation_result("vr1_validation", vr1_result)
+                    
+                    # Save VR1 report if configured
+                    if settings.VR1_REPORT_PATH:
+                        import json
+                        report_path = Path(settings.VR1_REPORT_PATH)
+                        report_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(report_path, 'w') as f:
+                            json.dump(vr1_result, f, indent=2)
+                        self.logger.logger.info(f"   - VR1 Report saved to: {report_path}")
+                    
+                    # Log VR1 details
+                    self.logger.logger.info(f"🔍 VR1 Validation Results:")
+                    self.logger.logger.info(f"   - Success: {success}")
+                    self.logger.logger.info(f"   - Enforcement Mode: {settings.VR1_ENFORCEMENT_MODE}")
+                    self.logger.logger.info(f"   - Auto-Healing: {settings.VR1_AUTO_HEALING}")
+                    if actions:
+                        self.logger.logger.info(f"   - Actions Taken ({len(actions)}):")
+                        for i, action in enumerate(actions, 1):
+                            self.logger.logger.info(f"      {i}. {action}")
+                    
+                    if not success:
+                        if settings.VR1_ENFORCEMENT_MODE == "strict":
+                            raise ValueError("VR1 boundary-termination validation failed")
+                        elif settings.VR1_ENFORCEMENT_MODE == "warning":
+                            self.logger.logger.warning("⚠️  VR1 validation failed but continuing (warning mode)")
+                    else:
+                        if len(actions) > 0:
+                            self.logger.logger.info(f"✅ VR1 validation passed with {len(actions)} auto-migrations")
+                            # Use migrated blueprint for generation
+                            system_blueprint = migrated_blueprint
+                        else:
+                            self.logger.logger.info("✅ VR1 validation passed (no migrations needed)")
+                            
+                except Exception as e:
+                    self.logger.logger.error(f"❌ VR1 validation error: {e}")
+                    if settings.VR1_ENFORCEMENT_MODE == "strict":
+                        raise
+                    else:
+                        self.logger.logger.warning("⚠️  Continuing despite VR1 validation error")
+        
+        # Phase 0.5: Allocate ports and resources  
+        with GenerationStepContext(self.logger, "port_allocation", "Allocate System Ports"):
+            allocated_ports = {}
+            
+            # For each component that needs a port
+            for component in system_blueprint.system.components:
+                if component.type in ['APIEndpoint', 'MetricsEndpoint']:
+                    allocated_port = self.resource_orchestrator.allocate_port(
+                        component.name,
+                        system_blueprint.system.name
+                    )
+                    allocated_ports[component.name] = allocated_port
+                    
+                    # Update component config with allocated port
+                    if not component.config:
+                        component.config = {}
+                    component.config['port'] = allocated_port
+                    
+                    self.logger.logger.info(f"🔌 Allocated port {allocated_port} for {component.name}")
+            
+            self.logger.logger.info(f"✅ Allocated {len(allocated_ports)} ports successfully")
+
+        # Phase 1: Generate scaffold
+        with GenerationStepContext(self.logger, "scaffold_generation", "Generate System Scaffold"):
+            scaffold = self.scaffold_generator.generate_system(system_blueprint)
+            
+            # Log generated scaffold files
+            self.logger.log_file_generated("main.py", scaffold.main_py, 
+                                         component_count=len(system_blueprint.system.components),
+                                         file_type="system_entry_point")
+            self.logger.log_file_generated("config/system_config.yaml", scaffold.config_yaml,
+                                         file_type="system_configuration")
+            self.logger.log_file_generated("requirements.txt", scaffold.requirements_txt,
+                                         file_type="python_dependencies")
+            self.logger.log_file_generated("Dockerfile", scaffold.dockerfile,
+                                         file_type="container_configuration")
+
+        # Phase 1.5: Generate schema artifacts (NEW - Phase 1 requirement)
+        with GenerationStepContext(self.logger, "schema_generation", "Generate Database Schema Artifacts"):
+            try:
+                scaffold_system_dir = self.output_dir / "scaffolds" / system_name
+                schema_files = generate_schema_artifacts(system_blueprint.raw_blueprint, scaffold_system_dir)
+                self.logger.logger.info(f"✅ Generated {len(schema_files)} schema artifacts")
+                for schema_file in schema_files:
+                    self.logger.log_file_generated(str(schema_file.relative_to(scaffold_system_dir)), 
+                                                 schema_file.read_text(),
+                                                 file_type="database_schema")
+            except Exception as e:
+                error_msg = f"Schema generation failed: {e}"
+                self.logger.logger.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+        
+        # Phase 1.6: Generate service communication configuration (NEW - Phase 2 requirement)
+        with GenerationStepContext(self.logger, "messaging_generation", "Generate Service Communication Configuration"):
+            try:
+                messaging_config = self.generate_service_communication_config(system_blueprint)
+                self.logger.logger.info(f"✅ Generated service communication configuration")
+                self.logger.log_file_generated("config/messaging_config.yaml", messaging_config,
+                                             file_type="messaging_configuration")
+            except Exception as e:
+                error_msg = f"Messaging configuration generation failed: {e}"
+                self.logger.logger.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+        
+        # Phase 1.8: Generate Shared Observability Module (NEW - Phase 2A Implementation)
+        with GenerationStepContext(self.logger, "observability_generation", "Generate Shared Observability Module"):
+            try:
+                from autocoder_cc.generators.scaffold.observability_generator import generate_shared_observability
+                
+                # Generate shared observability module in components directory
+                components_dir = self.output_dir / "scaffolds" / system_name / "components"
+                observability_file = generate_shared_observability(
+                    system_name=system_name,
+                    output_dir=components_dir,
+                    include_prometheus=True
+                )
+                
+                # Read content for logging
+                observability_content = observability_file.read_text()
+                
+                self.logger.log_file_generated("observability.py", observability_content,
+                                             file_type="shared_module",
+                                             component_count=len(system_blueprint.system.components))
+                
+                self.logger.logger.info(f"✅ Generated shared observability module: {observability_file}")
+                self.logger.logger.info(f"📏 Observability module: {len(observability_content)} chars, {len(observability_content.splitlines())} lines")
+                
+            except Exception as e:
+                error_msg = f"Shared observability module generation failed: {e}"
+                self.logger.logger.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+
+        # Phase 1.9: Generate Communication Framework (NEW - Phase 2B Implementation)
+        with GenerationStepContext(self.logger, "communication_generation", "Generate Communication Framework"):
+            try:
+                from autocoder_cc.generators.scaffold.communication_generator import generate_communication_framework
+                
+                # Extract bindings and components from blueprint
+                bindings = []
+                components = []
+                if hasattr(system_blueprint.system, 'bindings'):
+                    bindings = [binding.__dict__ for binding in system_blueprint.system.bindings]
+                if hasattr(system_blueprint.system, 'components'):
+                    components = []
+                    for component in system_blueprint.system.components:
+                        comp_dict = component.__dict__.copy()
+                        # Convert ParsedPort objects to dictionaries
+                        if 'inputs' in comp_dict and comp_dict['inputs']:
+                            comp_dict['inputs'] = [port.__dict__ for port in comp_dict['inputs']]
+                        if 'outputs' in comp_dict and comp_dict['outputs']:
+                            comp_dict['outputs'] = [port.__dict__ for port in comp_dict['outputs']]
+                        components.append(comp_dict)
+                
+                # Generate communication framework in components directory
+                components_dir = self.output_dir / "scaffolds" / system_name / "components"
+                communication_content = generate_communication_framework(
+                    system_name=system_name,
+                    bindings=bindings,
+                    components=components
+                )
+                
+                # Write communication module
+                communication_file = components_dir / "communication.py"
+                communication_file.write_text(communication_content)
+                
+                self.logger.log_file_generated("communication.py", communication_content,
+                                             file_type="communication_framework", 
+                                             bindings_count=len(bindings))
+                
+                self.logger.logger.info(f"✅ Generated communication framework: {communication_file}")
+                self.logger.logger.info(f"📏 Communication module: {len(communication_content)} chars, {len(communication_content.splitlines())} lines")
+                self.logger.logger.info(f"🔗 Configured {len(bindings)} component bindings for runtime routing")
+                
+            except Exception as e:
+                error_msg = f"Communication framework generation failed: {e}"
+                self.logger.logger.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+
+        # Expand recipes in blueprint before component generation
+        if hasattr(system_blueprint, 'raw_blueprint'):
+            components = BlueprintContract.get_components(system_blueprint.raw_blueprint)
+            for idx, component_spec in enumerate(components):
+                if 'recipe' in component_spec:
+                    recipe_name = component_spec['recipe']
+                    component_name = component_spec.get('name', 'unnamed')
+                    self.logger.logger.info(f"🧪 Expanding recipe: {recipe_name} for component: {component_name}")
+                    
+                    # Use the RecipeExpander instance!
+                    expanded_spec = self.recipe_expander.expand_to_spec(
+                        recipe_name=recipe_name,
+                        component_name=component_name,
+                        config=component_spec.get('config', {})
+                    )
+                    
+                    # Preserve additional fields from original spec
+                    for key, value in component_spec.items():
+                        if key not in ['recipe', 'config'] and key not in expanded_spec:
+                            expanded_spec[key] = value
+                    
+                    # Replace the component spec - need to handle nested structure
+                    if "system" in system_blueprint.raw_blueprint:
+                        system_blueprint.raw_blueprint['system']['components'][idx] = expanded_spec
+                    else:
+                        system_blueprint.raw_blueprint['components'][idx] = expanded_spec
+                    self.logger.logger.info(f"✅ Recipe expanded to type: {expanded_spec.get('type', 'unknown')}")
+        
+        # Phase 2: Generate component implementations with self-healing
+        with GenerationStepContext(self.logger, "component_generation", "Generate Component Implementations with Self-Healing"):
+            # Convert ParsedSystemBlueprint back to YAML for healing integration
+            import yaml
+            blueprint_yaml = yaml.dump(system_blueprint.raw_blueprint, default_flow_style=False)
+            
+            components_result = await self.healing_integration.generate_system_with_healing(blueprint_yaml)
+            
+            if not components_result.success:
+                error_msg = f"Component generation with healing failed: {components_result.error_message}"
+                self.logger.logger.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+            
+            # The healing integration handles component generation internally
+            # Check if components were generated in the output directory
+            system_output_dir = components_result.output_directory
+            components_dir = system_output_dir / "components"
+            
+            # Count generated component files
+            component_files = list(components_dir.glob("*.py")) if components_dir.exists() else []
+            component_files = [f for f in component_files if f.name != "__init__.py"]
+            
+            self.logger.logger.info(f"✅ Generated {len(component_files)} component files with healing applied")
+            if components_result.components_healed > 0:
+                self.logger.logger.info(f"🔧 Self-healing applied to {components_result.components_healed} components")
+            
+            # Create dummy component objects for compatibility with existing pipeline
+            # These are used later in the system assembly process
+            components = []
+            for component_file in component_files:
+                component_name = component_file.stem
+                # Find corresponding component in blueprint
+                blueprint_component = None
+                for comp in system_blueprint.system.components:
+                    if comp.name.lower() == component_name.lower():
+                        blueprint_component = comp
+                        break
+                
+                if blueprint_component:
+                    # Create a minimal component object for pipeline compatibility
+                    from autocoder_cc.blueprint_language.component_logic_generator import GeneratedComponent
+                    component_obj = GeneratedComponent(
+                        name=blueprint_component.name,
+                        type=blueprint_component.type,
+                        implementation=component_file.read_text(),
+                        imports=[],  # Empty imports list
+                        dependencies=[],  # Empty dependencies list
+                        file_path=str(component_file)  # Use file_path instead of output_file
+                    )
+                    components.append(component_obj)
+                    
+                    self.logger.log_component_generation(
+                        blueprint_component.name, 
+                        blueprint_component.type,
+                        component_file.read_text(),
+                        imports=0,  # Will be populated by healing system
+                        dependencies=0  # Will be populated by healing system
+                    )
+        
+        # Phase 2.5: Architectural Compliance Validation (NEW - Critical enforcement)
+        with GenerationStepContext(self.logger, "compliance_validation", "Validate Architectural Compliance"):
+            try:
+                # Import and run compliance validation
+                from autocoder_cc.blueprint_language.blueprint_compliance_engine import (
+                    BlueprintComplianceEngine, validate_system_compliance
+                )
+                
+                # Create temporary blueprint file for compliance validation
+                import tempfile
+                import yaml
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_blueprint:
+                    yaml.dump(system_blueprint.raw_blueprint, temp_blueprint, default_flow_style=False)
+                    temp_blueprint_path = temp_blueprint.name
+                
+                # Get the scaffold system directory path
+                scaffold_system_dir = self.output_dir / "scaffolds" / system_name
+                
+                try:
+                    # Run compliance validation - this will raise exception on critical violations
+                    validate_system_compliance(temp_blueprint_path, str(scaffold_system_dir))
+                    self.logger.logger.info("✅ System passes architectural compliance validation")
+                    
+                    # Generate detailed compliance report
+                    compliance_engine = BlueprintComplianceEngine()
+                    compliance_report = compliance_engine.validate_system(temp_blueprint_path, str(scaffold_system_dir))
+                    
+                    # Save compliance report to output directory
+                    report_path = scaffold_system_dir / "COMPLIANCE_REPORT.md"
+                    report_content = compliance_engine.generate_compliance_report(compliance_report)
+                    report_path.write_text(report_content)
+                    
+                    self.logger.log_file_generated("COMPLIANCE_REPORT.md", report_content, 
+                                                 file_type="compliance_report",
+                                                 compliance_status="PASSED")
+                    
+                    # Log compliance metrics
+                    self.logger.logger.info(f"📊 Compliance Summary: {compliance_report.summary['total_violations']} violations "
+                                          f"({compliance_report.summary['critical']} critical, "
+                                          f"{compliance_report.summary['high']} high priority)")
+                    
+                except RuntimeError as compliance_error:
+                    # Critical compliance violations detected
+                    self.logger.logger.error(f"❌ CRITICAL COMPLIANCE VIOLATIONS: {compliance_error}")
+                    
+                    # Generate compliance report even for failures
+                    try:
+                        compliance_engine = BlueprintComplianceEngine()
+                        compliance_report = compliance_engine.validate_system(temp_blueprint_path, str(scaffold_system_dir))
+                        report_path = scaffold_system_dir / "COMPLIANCE_REPORT.md"
+                        report_content = compliance_engine.generate_compliance_report(compliance_report)
+                        report_path.write_text(report_content)
+                        
+                        self.logger.log_file_generated("COMPLIANCE_REPORT.md", report_content, 
+                                                     file_type="compliance_report",
+                                                     compliance_status="FAILED")
+                    except Exception as report_error:
+                        self.logger.logger.error(f"Failed to generate compliance report: {report_error}")
+                    
+                    # Compliance violations cause system generation failure
+                    raise RuntimeError(f"System generation failed compliance validation: {compliance_error}")
+                
+                finally:
+                    # Clean up temporary blueprint file
+                    import os
+                    try:
+                        os.unlink(temp_blueprint_path)
+                    except Exception as cleanup_error:
+                        self.logger.logger.error(f"Failed to cleanup temporary blueprint file {temp_blueprint_path}: {cleanup_error}")
+                        # Still raise because cleanup failures indicate system issues
+                        raise RuntimeError(f"Failed to cleanup temporary blueprint file: {cleanup_error}")
+                        
+            except ImportError as e:
+                self.logger.logger.error(f"❌ Blueprint compliance engine not available: {e}")
+                # FAIL-FAST: Compliance validation is mandatory for reliable system generation
+                raise RuntimeError(f"Blueprint compliance engine is required but not available: {e}")
+            except Exception as e:
+                self.logger.logger.error(f"❌ Compliance validation failed: {e}")
+                # FAIL-FAST: Always enforce compliance validation
+                raise RuntimeError(f"System generation failed compliance validation: {e}")
+
+        # Phase 3: Generate tests (optional - allow graceful degradation)
+        tests = []
+        test_generation_failed = False
+        with GenerationStepContext(self.logger, "test_generation", "Generate Component Tests"):
+            # Check if test generation should be skipped entirely
+            from autocoder_cc.core.config import settings
+            if settings.SKIP_TEST_GENERATION:
+                self.logger.logger.info("📋 Skipping test generation (configured)")
+            else:
+                try:
+                    tests = self.test_generator.generate_tests(system_blueprint)
+                    
+                    # Log each generated test
+                    for test in tests:
+                        self.logger.log_file_generated(test.test_file_path, test.test_content,
+                                                     component_name=test.component_name,
+                                                     file_type="component_test")
+                    self.logger.logger.info(f"✅ Generated {len(tests)} test files successfully")
+                    
+                except Exception as e:
+                    # FAIL-FAST: Test generation is mandatory for reliable systems
+                    self.logger.logger.error(f"❌ Test generation failed: {e}")
+                    raise RuntimeError(f"Test generation is required but failed: {e}")
+        
+        # Phase 4: Generate production deployment artifacts (skip for unit tests)
+        if not self.skip_deployment:
+            with GenerationStepContext(self.logger, "deployment_generation", "Generate Production Deployment"):
+                deployment = await self.deployment_generator.generate_production_deployment(system_blueprint)
+                
+                # Log deployment artifacts
+                for manifest_name, manifest_content in deployment.kubernetes_manifests.items():
+                    self.logger.log_file_generated(f"k8s/{manifest_name}", manifest_content,
+                                                 file_type="kubernetes_manifest")
+                
+                if deployment.docker_compose:
+                    self.logger.log_file_generated("docker-compose.yml", deployment.docker_compose,
+                                                 file_type="docker_compose")
+                
+                if deployment.helm_chart:
+                    for helm_file, helm_content in deployment.helm_chart.items():
+                        self.logger.log_file_generated(f"helm/{helm_file}", helm_content,
+                                                     file_type="helm_chart")
+        else:
+            # Create minimal deployment for testing
+            deployment = GeneratedDeployment(
+                kubernetes_manifests={},
+                docker_compose="",
+                github_actions="",
+                gitlab_ci="",
+                secrets_config="",
+                helm_chart={},
+                sealed_secrets={}
+            )
+            self.logger.logger.info("📋 Skipping deployment generation (skip_deployment=True)")
+        
+        # Combine into final system
+        with GenerationStepContext(self.logger, "system_assembly", "Assemble Final System"):
+            final_system_dir = self._combine_into_final_system(
+                system_name, scaffold, components, tests, deployment, system_blueprint
+            )
+        
+        # Log performance metrics
+        self.logger.log_performance_metric("Components Generated", len(components), "components")
+        self.logger.log_performance_metric("Tests Generated", len(tests), "test files")
+        self.logger.log_performance_metric("K8s Manifests", len(deployment.kubernetes_manifests), "manifests")
+        
+        generated_system = GeneratedSystem(
+            name=system_name,
+            scaffold=scaffold,
+            components=components,
+            tests=tests,
+            deployment=deployment,
+            output_directory=final_system_dir
+        )
+        
+        return generated_system
+    
+    async def _generate_system_original(self, system_blueprint: ParsedSystemBlueprint) -> GeneratedSystem:
+        """Original generation without verbose logging (fallback)"""
+        system_name = system_blueprint.system.name
+        print(f"🚀 Generating system: {system_name}")
+        
+        # Pre-Generation Validation: Check for logical errors before starting generation
+        print(f"🔍 Pre-Generation Validation: Checking blueprint for logical errors...")
+        validation_errors = self.validation_orchestrator._validate_pre_generation(system_blueprint)
+        if validation_errors:
+            print(f"❌ Blueprint validation failed with {len(validation_errors)} errors:")
+            for error in validation_errors:
+                print(f"  - {error}")
+            raise ValueError(f"Blueprint validation failed. Cannot proceed with generation.")
+        print(f"✅ Pre-generation validation passed")
+        
+        # VR1 Boundary-Termination Validation (if enabled)
+        if settings.ENABLE_VR1_VALIDATION:
+            print(f"🔍 VR1 Boundary-Termination Validation...")
+            try:
+                vr1_coordinator = VR1ValidationCoordinator()
+                success, actions, migrated_blueprint = vr1_coordinator.validate_with_vr1_coordination(
+                    system_blueprint,
+                    force_vr1=settings.FORCE_VR1_COMPLIANCE
+                )
+                
+                if not success:
+                    if settings.VR1_ENFORCEMENT_MODE == "strict":
+                        raise ValueError("VR1 boundary-termination validation failed")
+                    elif settings.VR1_ENFORCEMENT_MODE == "warning":
+                        print("⚠️  VR1 validation failed but continuing (warning mode)")
+                else:
+                    if len(actions) > 0:
+                        print(f"✅ VR1 validation passed with {len(actions)} auto-migrations")
+                        # Use migrated blueprint for generation
+                        system_blueprint = migrated_blueprint
+                    else:
+                        print("✅ VR1 validation passed (no migrations needed)")
+                        
+            except Exception as e:
+                print(f"❌ VR1 validation error: {e}")
+                if settings.VR1_ENFORCEMENT_MODE == "strict":
+                    raise
+                else:
+                    print("⚠️  Continuing despite VR1 validation error")
+        
+        # Phase 0.5: Allocate ports and resources
+        print(f"🔌 Phase 0.5: Allocating system ports...")
+        allocated_ports = {}
+        
+        # For each component that needs a port
+        for component in system_blueprint.system.components:
+            if component.type in ['APIEndpoint', 'MetricsEndpoint']:
+                allocated_port = self.resource_orchestrator.allocate_port(
+                    component.name,
+                    system_blueprint.system.name
+                )
+                allocated_ports[component.name] = allocated_port
+                
+                # Update component config with allocated port
+                if not component.config:
+                    component.config = {}
+                component.config['port'] = allocated_port
+                
+                print(f"🔌 Allocated port {allocated_port} for {component.name}")
+        
+        print(f"✅ Allocated {len(allocated_ports)} ports successfully")
+        
+        # Phase 1: Generate scaffold (main.py, config, etc.)
+        print(f"📐 Phase 1: Generating system scaffold...")
+        scaffold = self.scaffold_generator.generate_system(system_blueprint)
+        print(f"✅ Scaffold generated: main.py, config, requirements, dockerfile")
+        
+        # Phase 2: Generate component implementations with self-healing
+        print(f"🔧 Phase 2: Generating component implementations with self-healing...")
+        # Convert ParsedSystemBlueprint back to YAML for healing integration
+        import yaml
+        blueprint_yaml = yaml.dump(system_blueprint.raw_blueprint, default_flow_style=False)
+        
+        components_result = await self.healing_integration.generate_system_with_healing(blueprint_yaml)
+        
+        if not components_result.success:
+            raise RuntimeError(f"Component generation with healing failed: {components_result.error_message}")
+        
+        # The healing integration handles component generation internally
+        # Check if components were generated in the output directory
+        system_output_dir = components_result.output_directory
+        components_dir = system_output_dir / "components" if system_output_dir else None
+        
+        # Count generated component files
+        component_files = list(components_dir.glob("*.py")) if components_dir and components_dir.exists() else []
+        component_files = [f for f in component_files if f.name != "__init__.py"]
+        
+        print(f"✅ Generated {len(component_files)} component files")
+        if components_result.components_healed > 0:
+            print(f"🔧 Self-healing applied to {components_result.components_healed} components")
+        
+        # Create dummy component objects for compatibility with existing pipeline
+        components = []
+        for component_file in component_files:
+            component_name = component_file.stem
+            # Find corresponding component in blueprint
+            blueprint_component = None
+            for comp in system_blueprint.system.components:
+                if comp.name.lower() == component_name.lower():
+                    blueprint_component = comp
+                    break
+            
+            if blueprint_component:
+                # Create a minimal component object for pipeline compatibility
+                from autocoder_cc.blueprint_language.component_logic_generator import GeneratedComponent
+                component_obj = GeneratedComponent(
+                    name=blueprint_component.name,
+                    type=blueprint_component.type,
+                    implementation=component_file.read_text(),
+                    imports=[],  # Empty imports list
+                    dependencies=[],  # Empty dependencies list
+                    file_path=str(component_file)  # Use file_path instead of output_file
+                )
+                components.append(component_obj)
+        
+        # Phase 2.5: Architectural Compliance Validation (CRITICAL - enforce architectural integrity)
+        print(f"🔍 Phase 2.5: Validating architectural compliance...")
+        try:
+            # Import and run compliance validation
+            from autocoder_cc.blueprint_language.blueprint_compliance_engine import (
+                BlueprintComplianceEngine, validate_system_compliance
+            )
+            
+            # Create temporary blueprint file for compliance validation
+            import tempfile
+            import yaml
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_blueprint:
+                yaml.dump(system_blueprint.raw_blueprint, temp_blueprint, default_flow_style=False)
+                temp_blueprint_path = temp_blueprint.name
+            
+            # Get the scaffold system directory path
+            scaffold_system_dir = self.output_dir / "scaffolds" / system_name
+            
+            try:
+                # Run compliance validation - this will raise exception on critical violations
+                validate_system_compliance(temp_blueprint_path, str(scaffold_system_dir))
+                print(f"✅ System passes architectural compliance validation")
+                
+                # Generate detailed compliance report
+                compliance_engine = BlueprintComplianceEngine()
+                compliance_report = compliance_engine.validate_system(temp_blueprint_path, str(scaffold_system_dir))
+                
+                # Save compliance report to output directory
+                report_path = scaffold_system_dir / "COMPLIANCE_REPORT.md"
+                report_content = compliance_engine.generate_compliance_report(compliance_report)
+                report_path.write_text(report_content)
+                
+                print(f"📊 Compliance Summary: {compliance_report.summary['total_violations']} violations "
+                      f"({compliance_report.summary['critical']} critical, "
+                      f"{compliance_report.summary['high']} high priority)")
+                
+            except RuntimeError as compliance_error:
+                # Critical compliance violations detected
+                print(f"❌ CRITICAL COMPLIANCE VIOLATIONS: {compliance_error}")
+                
+                # Generate compliance report even for failures
+                try:
+                    compliance_engine = BlueprintComplianceEngine()
+                    compliance_report = compliance_engine.validate_system(temp_blueprint_path, str(scaffold_system_dir))
+                    report_path = scaffold_system_dir / "COMPLIANCE_REPORT.md"
+                    report_content = compliance_engine.generate_compliance_report(compliance_report)
+                    report_path.write_text(report_content)
+                    print(f"📝 Compliance report saved to {report_path}")
+                except Exception as report_error:
+                    print(f"Failed to generate compliance report: {report_error}")
+                
+                # Compliance violations cause system generation failure
+                raise RuntimeError(f"System generation failed compliance validation: {compliance_error}")
+            
+            finally:
+                # Clean up temporary blueprint file
+                import os
+                try:
+                    os.unlink(temp_blueprint_path)
+                except Exception as e:
+                    raise RuntimeError(f"Failed to clean up temporary blueprint file {temp_blueprint_path}: {e}")
+                    
+        except ImportError as e:
+            print(f"❌ Blueprint compliance engine not available: {e}")
+            raise RuntimeError(f"System generation requires architectural compliance validation but compliance engine is not available: {e}")
+        except Exception as e:
+            print(f"❌ Compliance validation failed: {e}")
+            # FAIL-FAST: Always enforce compliance validation
+            raise RuntimeError(f"System generation failed compliance validation: {e}")
+        
+        # Phase 3: Generate tests for components (optional - respect fail-hard philosophy)
+        print(f"🧪 Phase 3: Generating component tests...")
+        tests = []
+        test_generation_failed = False
+        
+        # FAIL-FAST: Test generation is mandatory
+        # if settings.SKIP_TEST_GENERATION:
+        #     print(f"📋 Skipping test generation (configured)")
+        # else:
+        try:
+            tests = self.test_generator.generate_tests(system_blueprint)
+            print(f"✅ Generated {len(tests)} test files")
+        except Exception as e:
+            # FAIL-FAST: Test generation is mandatory for reliable systems
+            print(f"❌ Test generation failed: {e}")
+            raise RuntimeError(f"Test generation is required but failed: {e}")
+        
+        # Phase 4: Generate production deployment artifacts (NEW - Phase 7)
+        if not self.skip_deployment:
+            print(f"🏭 Phase 4: Generating production deployment artifacts...")
+            deployment = await self.deployment_generator.generate_production_deployment(system_blueprint)
+            print(f"✅ Generated deployment artifacts: {len(deployment.kubernetes_manifests)} k8s manifests, Docker Compose, CI/CD pipelines")
+        else:
+            # Create minimal deployment for testing
+            deployment = GeneratedDeployment(
+                kubernetes_manifests={},
+                docker_compose="",
+                github_actions="",
+                gitlab_ci="",
+                secrets_config="",
+                helm_chart={},
+                sealed_secrets={}
+            )
+            print(f"📋 Skipping deployment generation (skip_deployment=True)")
+        
+        # Combine into final system directory
+        final_system_dir = self._combine_into_final_system(
+            system_name, scaffold, components, tests, deployment, system_blueprint
+        )
+        
+        print(f"🎉 Complete system generated in: {final_system_dir}")
+        
+        return GeneratedSystem(
+            name=system_name,
+            scaffold=scaffold,
+            components=components,
+            tests=tests,
+            deployment=deployment,
+            output_directory=final_system_dir
+        )
+    
+    def _combine_into_final_system(self, 
+                                 system_name: str, 
+                                 scaffold: GeneratedScaffold,
+                                 components: List[GeneratedComponent],
+                                 tests: List[Any],  # PropertyTestSuite objects
+                                 deployment: GeneratedDeployment,
+                                 system_blueprint: ParsedSystemBlueprint) -> Path:
+        """Combine scaffold and components into final working system"""
+        
+        # Create final system directory - name matches blueprint system name exactly
+        final_dir = self.output_dir / system_name
+        if final_dir.exists():
+            shutil.rmtree(final_dir)
+        final_dir.mkdir(parents=True)
+        
+        # 1. Copy scaffold files from scaffold generator
+        scaffold_dir = self.output_dir / "scaffolds" / system_name
+        if scaffold_dir.exists():
+            # Copy main files
+            shutil.copy2(scaffold_dir / "main.py", final_dir / "main.py")
+            
+            # Copy config directory
+            if (scaffold_dir / "config").exists():
+                shutil.copytree(scaffold_dir / "config", final_dir / "config")
+            
+            # Copy requirements and dockerfile
+            for file in ["requirements.txt", "Dockerfile"]:
+                if (scaffold_dir / file).exists():
+                    shutil.copy2(scaffold_dir / file, final_dir / file)
+        
+        # 2. Copy component files from component generator  
+        # First, copy from scaffolds directory (correct structure)
+        scaffold_component_dir = self.output_dir / "scaffolds" / system_name / "components"
+        if scaffold_component_dir.exists():
+            shutil.copytree(scaffold_component_dir, final_dir / "components")
+        
+        # Also copy from nested components directory if it exists (flatten the structure)
+        nested_component_dir = self.output_dir / "components" / system_name / "components"
+        if nested_component_dir.exists():
+            # Create components directory if it doesn't exist
+            (final_dir / "components").mkdir(exist_ok=True)
+            # Copy individual component files (flatten the nested structure)
+            for component_file in nested_component_dir.glob("*.py"):
+                shutil.copy2(component_file, final_dir / "components" / component_file.name)
+            print(f"   ✅ Flattened nested components from {nested_component_dir}")
+        
+        # 3. Copy test files from test generator
+        test_dir = self.output_dir / "tests" / system_name
+        if test_dir.exists():
+            shutil.copytree(test_dir, final_dir / "tests")
+            print(f"   ✅ Copied test files from {test_dir}")
+        
+        # 4. Copy deployment files from deployment generator (NEW - Phase 7)
+        deployment_dir = self.output_dir / "deployments" / system_name
+        if deployment_dir.exists():
+            # Copy k8s manifests
+            if (deployment_dir / "k8s").exists():
+                shutil.copytree(deployment_dir / "k8s", final_dir / "k8s")
+            # Copy Docker Compose
+            if (deployment_dir / "docker-compose.yml").exists():
+                shutil.copy2(deployment_dir / "docker-compose.yml", final_dir / "docker-compose.yml")
+            # Copy CI/CD files
+            if (deployment_dir / ".github").exists():
+                shutil.copytree(deployment_dir / ".github", final_dir / ".github")
+            if (deployment_dir / ".gitlab-ci.yml").exists():
+                shutil.copy2(deployment_dir / ".gitlab-ci.yml", final_dir / ".gitlab-ci.yml")
+            # Copy Helm chart
+            if (deployment_dir / "helm").exists():
+                shutil.copytree(deployment_dir / "helm", final_dir / "helm")
+            # Copy additional config files
+            if (deployment_dir / "config").exists():
+                deployment_config_dir = deployment_dir / "config"
+                for config_file in deployment_config_dir.glob("*"):
+                    if config_file.is_file():
+                        (final_dir / "config").mkdir(exist_ok=True)
+                        shutil.copy2(config_file, final_dir / "config" / config_file.name)
+            print(f"   ✅ Copied deployment artifacts from {deployment_dir}")
+        
+        # 5. Save blueprint file with the generated system
+        self._save_blueprint_with_system(system_blueprint, final_dir)
+        
+        # 6. Create __init__.py files for proper imports
+        self._create_init_files(final_dir, components, system_blueprint)
+        
+        # 7. Update main.py with correct component imports
+        self._update_main_py_imports(final_dir, components)
+        
+        # 7. Copy documentation generator for auto-generated docs
+        self._copy_documentation_generator(final_dir)
+        
+        # 8. MANDATORY: Run comprehensive AST validation on all generated component files
+        # Cycle 23 automation integration - closes the validation loop
+        self._enforce_system_ast_validation(final_dir)
+        
+        # 9. Setup autocoder as proper Python dependency
+        self._setup_autocoder_dependency(final_dir)
+        
+        return final_dir
+    
+    def _save_blueprint_with_system(self, system_blueprint: ParsedSystemBlueprint, output_dir: Path) -> None:
+        """
+        Save the blueprint YAML file with the generated system.
+        
+        This ensures generated systems contain their blueprint for harness loading
+        and provides transparency about how the system was created.
+        """
+        import json
+        import yaml
+        from datetime import datetime
+        
+        # Save the blueprint YAML file
+        blueprint_path = output_dir / "blueprint.yaml"
+        
+        try:
+            # Convert the ParsedSystemBlueprint back to a proper YAML structure
+            blueprint_dict = {
+                'schema_version': system_blueprint.raw_blueprint.get('schema_version', '1.0'),
+                'system': {
+                    'name': system_blueprint.system.name,
+                    'description': system_blueprint.system.description,
+                    'version': system_blueprint.system.version,
+                    'components': [
+                        {
+                            'name': comp.name,
+                            'type': comp.type,
+                            'description': comp.description,
+                            'configuration': comp.config or {},
+                            'inputs': [
+                                {
+                                    'name': inp.name,
+                                    'schema': inp.schema,
+                                    'description': getattr(inp, 'description', '')
+                                } for inp in comp.inputs
+                            ] if comp.inputs else [],
+                            'outputs': [
+                                {
+                                    'name': out.name,
+                                    'schema': out.schema,
+                                    'description': getattr(out, 'description', '')
+                                } for out in comp.outputs
+                            ] if comp.outputs else []
+                        }
+                        for comp in system_blueprint.system.components
+                    ],
+                    'bindings': [
+                        {
+                            'from_component': binding.from_component,
+                            'from_port': binding.from_port,
+                            'to_components': binding.to_components,
+                            'to_ports': binding.to_ports
+                        }
+                        for binding in system_blueprint.system.bindings
+                    ]
+                }
+            }
+            
+            # Add configuration if it exists
+            if hasattr(system_blueprint, 'configuration') and system_blueprint.configuration:
+                blueprint_dict['configuration'] = system_blueprint.configuration
+            
+            # Add policy if it exists
+            if hasattr(system_blueprint, 'policy') and system_blueprint.policy:
+                blueprint_dict['policy'] = system_blueprint.policy
+            
+            # Add schemas if they exist
+            if hasattr(system_blueprint, 'schemas') and system_blueprint.schemas:
+                blueprint_dict['schemas'] = system_blueprint.schemas
+            
+            # Write the YAML file
+            with open(blueprint_path, 'w', encoding='utf-8') as f:
+                yaml.dump(blueprint_dict, f, default_flow_style=False, indent=2, allow_unicode=True)
+            
+            print(f"   ✅ Saved blueprint.yaml with generated system")
+            
+            # Also create a system metadata file with generation details
+            metadata = {
+                "generated_at": datetime.now().isoformat(),
+                "generator_version": "autocoder4_cc-v1.0", 
+                "blueprint_schema_version": system_blueprint.raw_blueprint.get('schema_version', '1.0'),
+                "system_name": system_blueprint.system.name,
+                "components_count": len(system_blueprint.system.components),
+                "bindings_count": len(system_blueprint.system.bindings),
+                "generator_model": "claude-sonnet-4",
+                "generation_mode": "two_phase",
+                "harness_integration": "simplified"
+            }
+            
+            metadata_path = output_dir / "system_metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2)
+            
+            print(f"   ✅ Created system_metadata.json with generation details")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to save blueprint file - this is required for system integrity: {e}")
+    
+    def _copy_documentation_generator(self, system_dir: Path):
+        """Copy documentation generator to the generated system for auto-generated docs"""
+        try:
+            # Create blueprint_language directory in the generated system
+            blueprint_dir = system_dir / "blueprint_language"
+            blueprint_dir.mkdir(exist_ok=True)
+            
+            # Copy documentation_generator.py
+            source_file = Path(__file__).parent / "documentation_generator.py"
+            target_file = blueprint_dir / "documentation_generator.py"
+            
+            if source_file.exists():
+                shutil.copy2(source_file, target_file)
+                
+                # Create __init__.py for the blueprint_language module
+                init_file = blueprint_dir / "__init__.py"
+                with open(init_file, 'w', encoding='utf-8') as f:
+                    f.write('"""Auto-generated documentation support"""')
+                
+                print(f"   ✅ Copied documentation generator for auto-generated docs")
+            else:
+                # FAIL-FAST: Documentation generator is required for complete systems
+                raise FileNotFoundError(f"Documentation generator source not found: {source_file}")
+                
+        except Exception as e:
+            # FAIL-FAST: Documentation generator copying is required
+            raise RuntimeError(f"Could not copy documentation generator: {e}")
+    
+    def _create_init_files(self, system_dir: Path, components: List[GeneratedComponent], system_blueprint: ParsedSystemBlueprint):
+        """Create necessary __init__.py files"""
+        
+        # Create components/__init__.py with imports
+        components_init = system_dir / "components" / "__init__.py"
+        if components_init.parent.exists():
+            imports_content = self.component_generator.generate_component_imports(system_blueprint)
+            with open(components_init, 'w', encoding='utf-8') as f:
+                f.write(imports_content)
+        
+        # Create main __init__.py
+        main_init = system_dir / "__init__.py"
+        with open(main_init, 'w', encoding='utf-8') as f:
+            f.write(f'''"""
+Generated system: {system_blueprint.system.name}
+{system_blueprint.system.description or "Generated by Autocoder 3.3"}
+"""
+
+__version__ = "{system_blueprint.system.version}"
+__system_name__ = "{system_blueprint.system.name}"
+''')
+    
+    def _update_main_py_imports(self, system_dir: Path, components: List[GeneratedComponent]):
+        """Update main.py to import generated components correctly"""
+        
+        main_py_file = system_dir / "main.py"
+        if not main_py_file.exists():
+            return
+        
+        # Read current main.py
+        with open(main_py_file, 'r') as f:
+            content = f.read()
+        
+        # The main.py already has the correct imports generated by SystemScaffoldGenerator
+        # We don't need to modify it further since the scaffold generator now handles this correctly
+        # This method is kept for potential future use
+        
+        # Note: If there are any import path issues, they should be fixed in SystemScaffoldGenerator
+        # rather than trying to patch them here
+    
+    def _enforce_system_ast_validation(self, system_dir: Path) -> None:
+        """
+        Enforce mandatory AST validation on all generated component files.
+        
+        Cycle 23 automation integration requirement - closes the validation loop
+        identified by Gemini review. Ensures all generated components pass 
+        comprehensive AST analysis before system finalization.
+        
+        Args:
+            system_dir: Path to the generated system directory
+            
+        Raises:
+            RuntimeError: If any component files fail AST validation
+        """
+        component_dir = system_dir / "components"
+        
+        if not component_dir.exists():
+            # FAIL-FAST: Components directory is required for functioning systems
+            raise RuntimeError(
+                f"Components directory not found at {component_dir}. "
+                f"System generation is incomplete and cannot proceed."
+            )
+        
+        print(f"   🔍 Running comprehensive system AST validation on {component_dir}")
+        
+        try:
+            # Import AST validation directly to avoid circular dependencies
+            from autocoder_cc.validation.ast_analyzer import ASTValidationRuleEngine
+            
+            # Create AST validator with strict production thresholds
+            ast_validator = ASTValidationRuleEngine({
+                'rules_enabled': {
+                    'placeholder_detection': True,
+                    'component_pattern_validation': True,
+                    'hardcoded_value_detection': True,
+                    'code_quality_analysis': True
+                },
+                'severity_thresholds': {
+                    'critical': 0,  # Fail on any critical issues
+                    'high': 2,      # Allow up to 2 high severity issues  
+                    'medium': 5,    # Allow up to 5 medium severity issues
+                    'low': 10       # Allow up to 10 low severity issues
+                }
+            })
+            
+            # Find all Python component files
+            component_files = list(component_dir.glob("*.py"))
+            if not component_files:
+                # FAIL-FAST: Python component files are required for functioning systems
+                raise RuntimeError(
+                    f"No Python component files found in {component_dir}. "
+                    f"System generation is incomplete - components are missing."
+                )
+            
+            failed_files = []
+            passed_files = []
+            total_issues = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+            
+            for component_file in component_files:
+                if component_file.name == "__init__.py":
+                    continue  # Skip __init__.py files
+                
+                try:
+                    # Run AST analysis on file
+                    validation_result = ast_validator.analyze_file(str(component_file))
+                    
+                    # Extract validation issues
+                    component_violations = validation_result.get('component_violations', [])
+                    hardcoded_violations = validation_result.get('hardcoded_violations', [])
+                    placeholder_issues = validation_result.get('placeholders', [])
+                    
+                    # Count issues by severity
+                    file_severity_counts = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+                    
+                    all_violations = component_violations + hardcoded_violations
+                    for violation in all_violations:
+                        severity = violation.get('severity', 'medium')
+                        file_severity_counts[severity] = file_severity_counts.get(severity, 0) + 1
+                        total_issues[severity] = total_issues.get(severity, 0) + 1
+                    
+                    # Check against severity thresholds
+                    file_validation_passed = True
+                    file_threshold_violations = []
+                    
+                    for severity, count in file_severity_counts.items():
+                        threshold = ast_validator.severity_thresholds.get(severity, float('inf'))
+                        if count > threshold:
+                            file_validation_passed = False
+                            file_threshold_violations.append(f"{count} {severity} (threshold: {threshold})")
+                    
+                    if file_validation_passed:
+                        passed_files.append({
+                            'file': component_file.name,
+                            'component_violations': len(component_violations),
+                            'hardcoded_violations': len(hardcoded_violations),
+                            'placeholder_issues': len(placeholder_issues)
+                        })
+                        print(f"     ✅ {component_file.name} passed AST validation")
+                    else:
+                        failed_files.append({
+                            'file': component_file.name,
+                            'threshold_violations': file_threshold_violations,
+                            'critical_issues': [v for v in all_violations if v.get('severity') == 'critical'],
+                            'high_issues': [v for v in all_violations if v.get('severity') == 'high']
+                        })
+                        print(f"     ❌ {component_file.name} failed AST validation: {file_threshold_violations}")
+                
+                except Exception as file_error:
+                    failed_files.append({
+                        'file': component_file.name,
+                        'error': str(file_error)
+                    })
+                    print(f"     ❌ {component_file.name} AST validation error: {file_error}")
+            
+            # System-level validation summary
+            if failed_files:
+                # Collect all critical and high severity issues for detailed error
+                all_critical_issues = []
+                all_high_issues = []
+                
+                for failed_file in failed_files:
+                    if 'critical_issues' in failed_file:
+                        all_critical_issues.extend([
+                            f"{failed_file['file']}: {issue.get('suggestion', issue.get('description', 'Critical issue'))}"
+                            for issue in failed_file['critical_issues']
+                        ])
+                    if 'high_issues' in failed_file:
+                        all_high_issues.extend([
+                            f"{failed_file['file']}: {issue.get('suggestion', issue.get('description', 'High severity issue'))}"
+                            for issue in failed_file['high_issues']
+                        ])
+                
+                error_summary = []
+                if all_critical_issues:
+                    error_summary.extend([f"CRITICAL: {issue}" for issue in all_critical_issues])
+                if all_high_issues:
+                    error_summary.extend([f"HIGH: {issue}" for issue in all_high_issues])
+                
+                raise RuntimeError(
+                    f"FAIL-HARD: System AST validation failed. "
+                    f"{len(failed_files)} component files failed validation. "
+                    f"Failed files: {[f['file'] for f in failed_files]}. "
+                    f"Issues found: {error_summary}. "
+                    f"Cycle 23 requirement: All component files must pass AST validation before system finalization."
+                )
+            
+            # Success summary
+            print(f"   ✅ System AST validation PASSED: {len(passed_files)} component files validated successfully")
+            print(f"      Total issues found within thresholds: {total_issues['critical']} critical, "
+                  f"{total_issues['high']} high, {total_issues['medium']} medium, {total_issues['low']} low")
+            
+        except ImportError as e:
+            raise RuntimeError(
+                f"FAIL-HARD: AST validation modules not available for system validation. "
+                f"Cannot proceed without mandatory validation. Error: {e}"
+            )
+        except Exception as e:
+            # FAIL-FAST: All exceptions during AST validation indicate system problems
+            raise RuntimeError(
+                f"FAIL-HARD: System AST validation error: {e}. "
+                f"System generation cannot proceed without successful validation."
+            )
+    
+    def _setup_autocoder_dependency(self, system_dir: Path):
+        """Setup autocoder module as proper Python dependency for the generated system"""
+        
+        # Generate proper requirements.txt with autocoder package
+        requirements_path = system_dir / "requirements.txt"
+        
+        # Read existing requirements
+        existing_requirements = []
+        if requirements_path.exists():
+            with open(requirements_path, 'r') as f:
+                existing_requirements = f.read().strip().split('\n')
+        
+        # STANDALONE MODE: Generated systems are self-contained and don't require autocoder framework at runtime
+        # This is STRATEGIC: customers can deploy without installing our entire framework
+        # LLM is used for generation only, not runtime execution
+        # Components include all necessary base classes inline
+        # autocoder_dep = "autocoder>=5.2.0"  # Intentionally commented out for standalone mode
+        # if not any("autocoder" in req for req in existing_requirements):
+        #     existing_requirements.append(autocoder_dep)
+        
+        # Write updated requirements.txt
+        with open(requirements_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(existing_requirements))
+        
+        # Create setup.py for local development installations
+        setup_py_path = system_dir / "setup.py"
+        setup_py_content = f'''#!/usr/bin/env python3
+"""
+Setup script for generated system
+Allows installation as package for development and deployment
+"""
+from setuptools import setup, find_packages
+
+# Read requirements
+with open("requirements.txt", "r") as f:
+    requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+setup(
+    name="{system_dir.name}",
+    version="1.0.0",
+    description="Generated system by Autocoder 5.2",
+    packages=find_packages(),
+    install_requires=requirements,
+    python_requires=">=3.9",
+    entry_points={{
+        "console_scripts": [
+            "{system_dir.name}=main:main",
+        ],
+    }},
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+    ],
+)
+'''
+        
+        with open(setup_py_path, 'w', encoding='utf-8') as f:
+            f.write(setup_py_content)
+        
+        # Create pyproject.toml for modern Python packaging
+        pyproject_path = system_dir / "pyproject.toml"
+        pyproject_content = f'''[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{system_dir.name}"
+version = "1.0.0"
+description = "Generated system by Autocoder 5.2"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    # STANDALONE MODE: No autocoder dependency needed
+    "pyyaml>=6.0",
+    "flask>=2.3.0",
+    "gunicorn>=21.0.0",
+    "werkzeug>=2.3.0",
+]
+
+[project.scripts]
+{system_dir.name} = "main:main"
+
+[tool.setuptools]
+packages = ["components"]
+'''
+        
+        with open(pyproject_path, 'w', encoding='utf-8') as f:
+            f.write(pyproject_content)
+        
+        # Create README.md with installation instructions
+        readme_path = system_dir / "README.md"
+        readme_content = f'''# {system_dir.name}
+
+Generated system by Autocoder 5.2
+
+## Installation
+
+### For deployment:
+```bash
+# STANDALONE MODE: No autocoder framework needed
+pip install -r requirements.txt
+```
+
+### For local development:
+```bash
+pip install -e .
+```
+
+## Usage
+
+```bash
+python main.py
+```
+
+## Docker
+
+```bash
+docker build -t {system_dir.name} .
+docker run -p 8080:8080 {system_dir.name}
+```
+
+## Dependencies
+
+This system is fully standalone and does not require the autocoder package at runtime.
+All necessary harness and component infrastructure has been generated and included.
+'''
+        
+        with open(readme_path, 'w', encoding='utf-8') as f:
+            f.write(readme_content)
+        
+        print(f"✅ Setup standalone Python system")
+        print(f"   - Generated requirements.txt with no autocoder dependency")
+        print(f"   - Created setup.py for development installation")
+        print(f"   - Created pyproject.toml for modern packaging")
+        print(f"   - Created README.md with installation instructions")
+    
+    def validate_generated_system(self, generated_system: GeneratedSystem) -> List[str]:
+        """Validate that the generated system is correct and complete"""
+        
+        validation_errors = []
+        system_dir = generated_system.output_directory
+        
+        # Check required files exist
+        required_files = [
+            "main.py",
+            "config/system_config.yaml", 
+            "requirements.txt",
+            "components/__init__.py"
+        ]
+        
+        # Add test files if any tests were generated
+        if generated_system.tests:
+            required_files.append("tests/conftest.py")
+            for test in generated_system.tests:
+                required_files.append(test.test_file_path)
+        
+        for file_path in required_files:
+            full_path = system_dir / file_path
+            if not full_path.exists():
+                validation_errors.append(f"Missing required file: {file_path}")
+        
+        # Check component files exist
+        for comp in generated_system.components:
+            comp_file = system_dir / "components" / f"{comp.name}.py"
+            if not comp_file.exists():
+                validation_errors.append(f"Missing component file: components/{comp.name}.py")
+        
+        # Check that autocoder dependency is properly configured
+        requirements_file = system_dir / "requirements.txt"
+        if requirements_file.exists():
+            requirements_content = requirements_file.read_text()
+            if "autocoder" not in requirements_content:
+                validation_errors.append("Missing autocoder dependency in requirements.txt")
+        else:
+            validation_errors.append("Missing requirements.txt file")
+        
+        # Check that setup.py exists for proper packaging
+        setup_py_file = system_dir / "setup.py"
+        if not setup_py_file.exists():
+            validation_errors.append("Missing setup.py for proper Python packaging")
+        
+        # Basic syntax check on main.py
+        try:
+            main_py_content = (system_dir / "main.py").read_text()
+            compile(main_py_content, "main.py", "exec")
+        except SyntaxError as e:
+            validation_errors.append(f"Syntax error in main.py: {e}")
+        except Exception as e:
+            validation_errors.append(f"Error reading main.py: {e}")
+        
+        return validation_errors
+    
+
+    def _validate_pre_generation(self, system_blueprint: ParsedSystemBlueprint) -> List[str]:
+        """
+        Use extracted BlueprintValidator for comprehensive validation.
+        
+        This method now delegates to the extracted blueprint validation module
+        to eliminate code duplication and use the single source of truth.
+        """
+        from autocoder_cc.blueprint_language.processors.blueprint_validator import BlueprintValidator
+        
+        validator = BlueprintValidator()
+        return validator.validate_pre_generation(system_blueprint)
+    
+
+    def generate_service_communication_config(self, system_blueprint: ParsedSystemBlueprint) -> str:
+        """Generate service communication configuration for Phase 2 messaging"""
+        
+        system_name = system_blueprint.system.name
+        components = system_blueprint.system.components
+        bindings = system_blueprint.system.bindings
+        
+        # Analyze system for messaging requirements
+        messaging_type = self._determine_messaging_type(system_blueprint)
+        queue_config = self._generate_queue_config(system_blueprint)
+        service_config = self._generate_service_config(components)
+        
+        # Generate messaging configuration YAML
+        messaging_config = {
+            "messaging": {
+                "type": messaging_type,
+                "connection": self._generate_connection_config(messaging_type),
+                "services": service_config,
+                "queues": queue_config,
+                "system": {
+                    "name": system_name,
+                    "communication_pattern": "service_oriented",
+                    "deployment_mode": "distributed"
+                }
+            }
+        }
+        
+        import yaml
+        return yaml.dump(messaging_config, default_flow_style=False, indent=2)
+    
+    def _determine_messaging_type(self, system_blueprint) -> str:
+        """Determine messaging type using LLM-based intelligent analysis"""
+        
+        # Use LLM to intelligently select messaging type based on system requirements
+        try:
+            # Get comprehensive system context for LLM
+            system_context = self._build_messaging_context(system_blueprint)
+            
+            # Create prompt for LLM to make intelligent decision
+            prompt = f"""Analyze this system blueprint and select the most appropriate messaging protocol.
+
+System Details:
+{system_context}
+
+Available Messaging Protocols:
+1. http - REST/HTTP for synchronous request-response, web APIs, simple integrations
+2. rabbitmq - Message broker for async messaging, queuing, durability, pub-sub patterns
+3. kafka - Distributed streaming for high-volume events, log aggregation, event sourcing
+4. grpc - Binary protocol for low-latency microservice communication, streaming
+5. websocket - Full-duplex for real-time updates, bidirectional communication
+
+Consider the following factors:
+- System scale and expected message volume
+- Latency requirements
+- Durability and reliability needs
+- Communication patterns (sync/async, pub-sub, streaming)
+- Component types and their natural communication needs
+
+Provide your selection as a single word (http, rabbitmq, kafka, grpc, or websocket).
+Think through the requirements carefully and select the best fit.
+Response format: Just the protocol name, nothing else."""
+
+            # Use component generator's LLM (already configured)
+            if hasattr(self, 'component_generator') and self.component_generator:
+                response = self.component_generator._generate_with_llm(
+                    prompt,
+                    temperature=0.3,  # Low temperature for consistent decisions
+                    max_tokens=10
+                )
+                
+                # Extract protocol from response
+                selected_type = response.strip().lower()
+                
+                # Validate it's a known protocol
+                valid_types = ['http', 'rabbitmq', 'kafka', 'grpc', 'websocket']
+                if selected_type not in valid_types:
+                    self.structured_logger.warning(
+                        f"LLM returned invalid messaging type: {selected_type}, defaulting to http"
+                    )
+                    selected_type = 'http'
+            else:
+                # FAIL FAST - No LLM means no system generation
+                raise RuntimeError(
+                    "CRITICAL: LLM provider not available for messaging type selection. "
+                    "System generation requires LLM to make intelligent architectural decisions. "
+                    "Configure component_generator with LLM provider."
+                )
+                
+        except Exception as e:
+            # FAIL FAST - Don't hide errors
+            self.structured_logger.error(
+                f"CRITICAL: LLM messaging selection failed: {e}"
+            )
+            raise RuntimeError(
+                f"Failed to select messaging type using LLM: {e}. "
+                "System generation cannot proceed without intelligent messaging selection."
+            ) from e
+        
+        # Log the intelligent decision
+        self.structured_logger.info(
+            "Messaging type selected using LLM intelligence",
+            operation="_determine_messaging_type",
+            tags={
+                "selected_type": selected_type,
+                "component_count": len(system_blueprint.system.components) if hasattr(system_blueprint.system, 'components') else 0,
+                "method": "llm_intelligent"
+            }
+        )
+        
+        return selected_type
+    
+    def _build_messaging_context(self, system_blueprint) -> str:
+        """Build comprehensive context for LLM decision making"""
+        context_parts = []
+        
+        # System overview
+        context_parts.append(f"System: {system_blueprint.system.name}")
+        context_parts.append(f"Description: {system_blueprint.system.description}")
+        
+        # Component analysis
+        if hasattr(system_blueprint.system, 'components'):
+            context_parts.append(f"\nComponents ({len(system_blueprint.system.components)}):")
+            for comp in system_blueprint.system.components:
+                comp_info = f"- {comp.name} ({comp.type})"
+                if hasattr(comp, 'config') and comp.config:
+                    # Include relevant config details
+                    if 'throughput' in comp.config:
+                        comp_info += f" [throughput: {comp.config['throughput']}]"
+                    if 'max_latency' in comp.config:
+                        comp_info += f" [max_latency: {comp.config['max_latency']}ms]"
+                    if 'durability' in comp.config or 'persistent' in comp.config:
+                        comp_info += " [requires durability]"
+                context_parts.append(comp_info)
+        
+        # Binding patterns
+        if hasattr(system_blueprint.system, 'bindings') and system_blueprint.system.bindings:
+            context_parts.append(f"\nData flow patterns: {len(system_blueprint.system.bindings)} connections")
+            
+        return "\n".join(context_parts)
+    
+    def _simple_fallback_selection(self, system_blueprint) -> str:
+        """DEPRECATED - Should never be called. System must fail fast without LLM."""
+        raise RuntimeError(
+            "CRITICAL: Fallback selection attempted. "
+            "System generation requires LLM for all decisions. "
+            "This method should never be called."
+        )
+    
+    def _create_messaging_requirements_analyzer(self) -> TransparentMessagingAnalyzer:
+        """Create transparent messaging requirements analyzer with verified benchmarks"""
+        return TransparentMessagingAnalyzer()
+    
+    def _estimate_message_volume_by_type(self, component_type: str) -> int:
+        """Estimate message volume based on component type using industry benchmarks"""
+        volume_estimates = {
+            'Source': 1000,           # Data generators typically produce 1K msgs/sec
+            'APIEndpoint': 5000,      # REST APIs handle ~5K requests/sec
+            'MessageSource': 8000,    # Message producers ~8K msgs/sec
+            'EventSource': 2000,      # Event streams ~2K events/sec
+            'Transformer': 3000,      # Processing components ~3K msgs/sec
+            'Model': 500,             # ML models ~500 inferences/sec
+            'Store': 2000,            # Storage operations ~2K writes/sec
+            'Sink': 1500,             # Data consumers ~1.5K msgs/sec
+            'Controller': 1000        # Control components ~1K operations/sec
+        }
+        return volume_estimates.get(component_type, 1000)
+    
+    def _estimate_message_size_by_type(self, component_type: str) -> int:
+        """Estimate message size based on component type using industry standards"""
+        size_estimates = {
+            'Source': 256,            # Small data records
+            'APIEndpoint': 1024,      # JSON API responses
+            'MessageSource': 512,     # Message queue payloads
+            'EventSource': 128,       # Event notifications
+            'Transformer': 1024,      # Processed data
+            'Model': 2048,            # ML model outputs with metadata
+            'Store': 512,             # Database records
+            'Sink': 256,              # Simple acknowledgments
+            'Controller': 128         # Control messages
+        }
+        return size_estimates.get(component_type, 512)
+    
+    def _estimate_latency_requirement_by_type(self, component_type: str) -> float:
+        """Estimate latency requirements based on component type"""
+        latency_estimates = {
+            'Source': 100.0,          # Data generators can tolerate higher latency
+            'APIEndpoint': 50.0,      # User-facing APIs need responsiveness
+            'MessageSource': 20.0,    # Message producers need moderate latency
+            'EventSource': 10.0,      # Events need low latency
+            'Transformer': 100.0,     # Processing can tolerate some latency
+            'Model': 200.0,           # ML inference can take longer
+            'Store': 50.0,            # Storage operations moderate latency
+            'Sink': 100.0,            # Data consumption less time-sensitive
+            'Controller': 25.0        # Control operations need responsiveness
+        }
+        return latency_estimates.get(component_type, 100.0)
+    
+    def _analyze_durability_requirements(self, system_blueprint) -> bool:
+        """Analyze if system requires durable messaging"""
+        # Check for Store components or explicit durability configuration
+        for component in system_blueprint.system.components:
+            if component.type in ['Store', 'Database', 'Repository']:
+                return True
+            config = component.config or {}
+            if config.get('durable', False) or config.get('persistent', False):
+                return True
+        return False
+    
+    def _analyze_ordering_requirements(self, system_blueprint) -> bool:
+        """Analyze if system requires message ordering"""
+        # Check for explicit ordering requirements
+        for component in system_blueprint.system.components:
+            config = component.config or {}
+            if config.get('ordered', False) or config.get('sequence_required', False):
+                return True
+            # Financial and transaction systems typically need ordering
+            if any(keyword in component.description.lower() for keyword in 
+                   ['transaction', 'financial', 'payment', 'order', 'sequence']):
+                return True
+        return False
+    
+    def _analyze_network_conditions(self, system_blueprint) -> str:
+        """Analyze expected network conditions"""
+        # Check for deployment configuration hints
+        config = getattr(system_blueprint, 'configuration', {}) or {}
+        
+        # Check for cloud deployment (typically high reliability)
+        if config.get('environment') in ['cloud', 'aws', 'azure', 'gcp']:
+            return 'high'
+        
+        # Check for distributed deployment
+        if config.get('deployment_mode') == 'distributed':
+            return 'medium'
+        
+        # Check component distribution
+        if len(system_blueprint.system.components) > 10:
+            return 'medium'  # Many components suggest distributed deployment
+        
+        return 'high'  # Default to high reliability for single-node deployments
+    
+    def _analyze_component_coupling(self, system_blueprint) -> str:
+        """Analyze component coupling strength"""
+        components = system_blueprint.system.components
+        bindings = system_blueprint.system.bindings
+        
+        # Calculate coupling ratio
+        if not components:
+            return 'loose'
+        
+        binding_count = len(bindings)
+        component_count = len(components)
+        coupling_ratio = binding_count / component_count if component_count > 0 else 0
+        
+        # High coupling: many bindings relative to components
+        if coupling_ratio > 2.0:
+            return 'tight'
+        elif coupling_ratio > 1.0:
+            return 'medium'
+        else:
+            return 'loose'
+    
+    def _analyze_failure_tolerance(self, system_blueprint) -> str:
+        """Analyze system failure tolerance requirements"""
+        # Check for explicit availability requirements
+        config = getattr(system_blueprint, 'configuration', {}) or {}
+        
+        if config.get('availability') in ['high', '99.9%', '99.99%']:
+            return 'high'
+        
+        # Check for critical system indicators
+        critical_keywords = ['critical', 'production', 'enterprise', 'mission']
+        description = system_blueprint.system.description.lower() if system_blueprint.system.description else ''
+        
+        if any(keyword in description for keyword in critical_keywords):
+            return 'high'
+        
+        # Default based on component count (more components = higher failure risk)
+        if len(system_blueprint.system.components) > 15:
+            return 'high'
+        elif len(system_blueprint.system.components) > 5:
+            return 'medium'
+        else:
+            return 'low'
+    
+    def _generate_connection_config(self, messaging_type: str) -> Dict[str, Any]:
+        """Generate connection configuration for messaging system"""
+        if messaging_type == "rabbitmq":
+            return {
+                "host": "${RABBITMQ_HOST:localhost}",
+                "port": "${RABBITMQ_PORT:5672}",
+                "username": "${RABBITMQ_USERNAME}",
+                "password": "${RABBITMQ_PASSWORD}",
+                "virtual_host": "${RABBITMQ_VHOST:/}",
+                "exchange": "${RABBITMQ_EXCHANGE:autocoder_exchange}",
+                "connection_url": "amqp://${RABBITMQ_USERNAME}:${RABBITMQ_PASSWORD}@${RABBITMQ_HOST:localhost}:${RABBITMQ_PORT:5672}/"
+            }
+        elif messaging_type == "kafka":
+            return {
+                "bootstrap_servers": "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}",
+                "client_id": "${KAFKA_CLIENT_ID:autocoder_cc}",
+                "security_protocol": "${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}"
+            }
+        elif messaging_type == "http":
+            return {
+                "base_url": "${HTTP_BASE_URL:http://localhost:8080}",
+                "timeout": "${HTTP_TIMEOUT:30}",
+                "max_retries": "${HTTP_MAX_RETRIES:3}"
+            }
+        else:
+            raise ValueError(f"Unsupported messaging type: {messaging_type}")
+    
+    def _generate_queue_config(self, system_blueprint: ParsedSystemBlueprint) -> Dict[str, Any]:
+        """Generate queue configuration for component communication"""
+        queue_config = {}
+        
+        # Create input and output queues for each component
+        for component in system_blueprint.system.components:
+            component_name = component.name
+            
+            # Input queue for component
+            queue_config[f"{component_name}_input"] = {
+                "durable": True,
+                "auto_delete": False,
+                "routing_key": f"{component_name}.input",
+                "message_ttl": 3600000,  # 1 hour
+                "max_length": 10000
+            }
+            
+            # Output queue for component
+            queue_config[f"{component_name}_output"] = {
+                "durable": True,
+                "auto_delete": False,
+                "routing_key": f"{component_name}.output",
+                "message_ttl": 3600000,  # 1 hour
+                "max_length": 10000
+            }
+        
+        return queue_config
+    
+    def _generate_service_config(self, components: List) -> Dict[str, Any]:
+        """Generate service configuration for each component"""
+        service_config = {}
+        
+        for component in components:
+            component_name = component.name
+            component_type = component.type
+            
+            service_config[component_name] = {
+                "type": component_type,
+                "messaging": {
+                    "bridge_type": "anyio_rabbitmq",
+                    "input_queue": f"{component_name}_input",
+                    "output_queue": f"{component_name}_output",
+                    "service_name": component_name
+                },
+                "deployment": {
+                    "replicas": 1,
+                    "port": 8080 + hash(component_name) % 1000,  # Unique port per service
+                    "health_check": "/health",
+                    "ready_check": "/ready"
+                },
+                "environment": {
+                    "MESSAGING_TYPE": "rabbitmq",
+                    "SERVICE_NAME": component_name,
+                    "LOG_LEVEL": "INFO"
+                }
+            }
+        
+        return service_config
+    
+    def generate_service_containers(self, system_blueprint: ParsedSystemBlueprint) -> Dict[str, str]:
+        """Generate service-specific Docker containers"""
+        containers = {}
+        
+        for component in system_blueprint.system.components:
+            component_name = component.name
+            component_type = component.type
+            
+            # Generate Dockerfile for service
+            dockerfile_content = self._generate_service_dockerfile(component, system_blueprint)
+            containers[f"{component_name}_dockerfile"] = dockerfile_content
+            
+            # Generate docker-compose service definition
+            service_definition = self._generate_service_compose_definition(component, system_blueprint)
+            containers[f"{component_name}_service"] = service_definition
+        
+        return containers
+    
+    def _generate_service_dockerfile(self, component, system_blueprint: ParsedSystemBlueprint) -> str:
+        """Generate Dockerfile for individual service"""
+        component_name = component.name
+        
+        dockerfile = f"""FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \\
+    gcc \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV SERVICE_NAME={component_name}
+ENV MESSAGING_TYPE=rabbitmq
+
+# Expose service port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the service
+CMD ["python", "main.py"]
+"""
+        return dockerfile
+    
+    def _generate_service_compose_definition(self, component, system_blueprint: ParsedSystemBlueprint) -> str:
+        """Generate docker-compose service definition with fixed Docker networking"""
+        component_name = component.name
+        component_type = component.type
+        
+        # Use consistent internal port 8080 for all services
+        internal_port = 8080
+        # Calculate unique external port for each service  
+        external_port = 8080 + hash(component_name) % 1000
+        
+        # Build environment variables with Docker service names
+        environment_vars = [
+            f"SERVICE_NAME={component_name}",
+            f"INTERNAL_PORT={internal_port}",
+            "MESSAGING_TYPE=rabbitmq",
+            "RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/",
+            # Database configuration using Docker service names
+            "DB_HOST=postgres",
+            "DB_PORT=5432", 
+            "DB_NAME=app_db",
+            "DB_USER=postgres",
+            "DB_PASSWORD=secure_password",
+            # Kafka configuration using Docker service names
+            "KAFKA_HOST=kafka",
+            "KAFKA_PORT=9092"
+        ]
+        
+        # Build dependencies based on component type
+        dependencies = ["rabbitmq"]
+        
+        # Store components need database
+        if component_type == "Store":
+            dependencies.append("postgres")
+            
+        # API endpoints might need database for persistence
+        if component_type == "APIEndpoint":
+            dependencies.append("postgres")
+            
+        # Build depends_on with health checks
+        depends_on_section = ""
+        if dependencies:
+            depends_on_section = "    depends_on:\n"
+            for dep in dependencies:
+                if dep == "postgres":
+                    depends_on_section += f"      {dep}:\n        condition: service_healthy\n"
+                else:
+                    depends_on_section += f"      - {dep}\n"
+        
+        service_definition = f"""  {component_name}:
+    build:
+      context: .
+      dockerfile: Dockerfile.{component_name}
+    ports:
+      - "{external_port}:{internal_port}"
+    environment:
+{chr(10).join(f"      - {env}" for env in environment_vars)}
+{depends_on_section}    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - autocoder_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{internal_port}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+"""
+        return service_definition
+
+
+async def async_main():
+    """Test the complete system generator"""
+    
+    # Check if a blueprint file was provided as argument
+    blueprint_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    
+    # If a file path is provided and exists, read it
+    if blueprint_arg and os.path.exists(blueprint_arg):
+        with open(blueprint_arg, 'r') as f:
+            test_blueprint_yaml = f.read()
+    else:
+        # Use inline test blueprint
+        test_blueprint_yaml = """
+schema_version: "1.0.0"
+system:
+  name: complete_test_system
+  description: Complete system for testing two-phase generation
+  version: 1.0.0
+  
+  components:
+    - name: data_generator
+      type: Source
+      description: Generates test data for the pipeline
+      configuration:
+        count: 20
+        start_value: 10
+        delay: 0.05
+      outputs:
+        - name: data
+          schema: DataRecord
+          
+    - name: data_processor
+      type: Transformer
+      description: Processes and enriches data
+      configuration:
+        multiplier: 5
+      inputs:
+        - name: input
+          schema: DataRecord
+      outputs:
+        - name: output
+          schema: ProcessedData
+          
+    - name: api_service
+      type: APIEndpoint
+      description: Exposes processed data via REST API
+      configuration:
+        port: 8080
+        host: "0.0.0.0"
+      inputs:
+        - name: input
+          schema: ProcessedData
+          
+    - name: ml_scorer
+      type: Model
+      description: Scores data using ML model
+      configuration:
+        model_type: classifier
+        threshold: 0.6
+      inputs:
+        - name: input
+          schema: ProcessedData
+      outputs:
+        - name: output
+          schema: ScoredData
+          
+    - name: data_warehouse
+      type: Store
+      description: Stores final results
+      configuration:
+        storage_type: file
+        storage_path: ./warehouse
+      inputs:
+        - name: input
+          schema: ScoredData
+  
+  bindings:
+    - from: data_generator.data
+      to: data_processor.input
+    - from: data_processor.output
+      to: api_service.input
+    - from: data_processor.output
+      to: ml_scorer.input
+    - from: ml_scorer.output
+      to: data_warehouse.input
+
+configuration:
+  environment: development
+  timeouts:
+    component_startup: 30
+    graceful_shutdown: 10
+"""
+    
+    # Generate system
+    generator = SystemGenerator(Path("./generated_systems"))
+    
+    try:
+        print("🚀 Starting two-phase system generation...")
+        generated_system = await generator.generate_system_from_yaml(test_blueprint_yaml)
+        
+        print(f"\n✅ System generation completed!")
+        print(f"   System name: {generated_system.name}")
+        print(f"   Output directory: {generated_system.output_directory}")
+        print(f"   Components generated: {len(generated_system.components)}")
+        
+        # Validate the generated system
+        print(f"\n🔍 Validating generated system...")
+        validation_errors = generator.validate_generated_system(generated_system)
+        
+        if validation_errors:
+            print(f"❌ Validation failed with {len(validation_errors)} errors:")
+            for error in validation_errors:
+                print(f"   - {error}")
+        else:
+            print(f"✅ System validation passed!")
+            
+            # Show directory structure
+            print(f"\n📁 Generated system structure:")
+            for root, dirs, files in os.walk(generated_system.output_directory):
+                level = root.replace(str(generated_system.output_directory), '').count(os.sep)
+                indent = ' ' * 2 * level
+                print(f"{indent}{os.path.basename(root)}/")
+                subindent = ' ' * 2 * (level + 1)
+                for file in files:
+                    print(f"{subindent}{file}")
+        
+    except Exception as e:
+        print(f"❌ System generation failed: {e}")
+        raise
+
+
+def main():
+    """Wrapper for async main"""
+    import asyncio
+    asyncio.run(async_main())
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,26 @@
+INTER-COMPONENT COMMUNICATION REQUIREMENTS:
+
+USE REAL COMMUNICATION (NOT SIMULATION):
+✓ Use await self.send_to_component("target_component", data) for direct messaging
+✓ Use await self.query_component("target_component", query) for queries  
+✓ Use await self.route_to_bindings(data) for blueprint-based routing
+✓ Return actual results from target components, not routing instructions
+
+REPLACE SIMULATION PATTERNS:
+✗ OLD (SIMULATION): return dict(task_store_query=dict(action="get_task", task_id=task_id))
+✓ NEW (REAL): result = await self.query_component("task_store", dict(action="get_task", task_id=task_id)); return result
+
+✗ OLD (ROUTING): return dict(task_controller_input=dict(action="add_task", task_data=request_body))
+✓ NEW (ROUTING): response = await self.send_to_component("task_controller", dict(action="add_task", task_data=request_body)); return response
+
+COMMUNICATION METHODS AVAILABLE:
+- self.send_to_component(target, data, port="input") -> response dict
+- self.query_component(target, query, port="query") -> response dict  
+- self.route_to_bindings(data, port="output") -> list of responses
+- self.communicator: Direct access to ComponentCommunicator (if needed)
+- self.registry: Direct access to ComponentRegistry (if needed)
+
+ERROR HANDLING:
+- Communication methods return dict(status="error", message="...") on failure
+- Always check response["status"] before using response["result"]
+- Use self.handle_error() for communication failures

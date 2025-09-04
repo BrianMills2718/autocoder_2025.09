@@ -1,0 +1,52 @@
+name: test_todo_system
+version: 1.0.0
+description: A simple todo system for deterministic testing
+
+components:
+  - name: task_store
+    type: Store
+    description: Stores tasks in memory
+    config:
+      database_type: memory
+      
+  - name: task_api  
+    type: APIEndpoint
+    description: REST API for task management
+    config:
+      port: 8080
+      endpoints:
+        - path: /tasks
+          method: GET
+          handler: get_tasks
+          description: Get all tasks
+        - path: /tasks
+          method: POST
+          handler: create_task
+          description: Create a new task
+        - path: /tasks/{task_id}
+          method: GET
+          handler: get_task
+          description: Get a specific task
+        - path: /tasks/{task_id}
+          method: PUT
+          handler: update_task
+          description: Update a task
+        - path: /tasks/{task_id}
+          method: DELETE  
+          handler: delete_task
+          description: Delete a task
+        - path: /health
+          method: GET
+          handler: health_check
+          description: Health check endpoint
+          
+bindings:
+  - source: task_api
+    target: task_store
+    protocol: direct
+    description: API calls store for data persistence
+
+deployment:
+  type: local
+  auto_restart: false
+  health_check_interval: 30

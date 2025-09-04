@@ -1,0 +1,1 @@
+# CQRS components for command/query separation

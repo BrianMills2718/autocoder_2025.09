@@ -1,0 +1,96 @@
+"""Validator component for walking skeleton."""
+import asyncio
+from typing import Dict, Any, Optional
+from autocoder_cc.components.primitives.base import Transformer
+from autocoder_cc.ports.base import InputPort, OutputPort
+from autocoder_cc.observability import get_logger
+
+class Validator(Transformer):
+    """Validate incoming API requests."""
+    
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.logger = get_logger(f"Validator.{name}")
+        self.input_port = InputPort(f"{name}.requests_in")
+        self.valid_output = OutputPort(f"{name}.valid_requests")
+        self.invalid_output = OutputPort(f"{name}.invalid_requests")
+        
+        self.required_fields = config.get('validation_rules', [{}])[0].get('required_fields', [])
+        self.valid_operations = config.get('validation_rules', [{}])[0].get('valid_operations', [])
+        self.max_data_size = config.get('validation_rules', [{}])[0].get('max_data_size', 10240)
+        
+        self.valid_count = 0
+        self.invalid_count = 0
+        
+    async def setup(self):
+        """Setup the validator."""
+        self.logger.info(f"Setting up Validator {self.name}")
+        # Start processing loop
+        asyncio.create_task(self._process_loop())
+    
+    async def _process_loop(self):
+        """Process messages from input port."""
+        while True:
+            try:
+                message = await self.input_port.receive()
+                if message:
+                    await self.validate_and_route(message)
+                else:
+                    await asyncio.sleep(0.001)
+            except Exception as e:
+                self.logger.error(f"Process loop error: {e}")
+                await asyncio.sleep(0.01)
+    
+    async def validate_and_route(self, message: Dict[str, Any]):
+        """Validate message and route to appropriate output."""
+        is_valid, error = self.validate(message)
+        
+        if is_valid:
+            self.valid_count += 1
+            message['validated'] = True
+            message['validator'] = self.name
+            await self.valid_output.send(message)
+        else:
+            self.invalid_count += 1
+            message['validation_error'] = error
+            await self.invalid_output.send(message)
+    
+    def validate(self, message: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+        """Validate a message."""
+        # Check required fields
+        for field in self.required_fields:
+            if field not in message:
+                return False, f"Missing required field: {field}"
+        
+        # Check valid operations
+        if self.valid_operations:
+            operation = message.get('operation')
+            if operation not in self.valid_operations:
+                return False, f"Invalid operation: {operation}"
+        
+        # Check data size
+        data = message.get('data', {})
+        data_size = len(str(data))
+        if data_size > self.max_data_size:
+            return False, f"Data size {data_size} exceeds max {self.max_data_size}"
+        
+        return True, None
+    
+    async def transform(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Transform method required by Transformer base class."""
+        # This method is required by the abstract base class
+        # Our actual transformation happens in validate_and_route
+        is_valid, _ = self.validate(item)
+        if is_valid:
+            item['validated'] = True
+            item['validator'] = self.name
+            return item
+        return None
+    
+    async def cleanup(self):
+        """Cleanup the validator."""
+        self.input_port.disconnect()
+        self.valid_output.disconnect()
+        self.invalid_output.disconnect()
+        self.logger.info(f"Validated {self.valid_count} valid, {self.invalid_count} invalid messages")
+        self.logger.info(f"Cleaned up Validator {self.name}")

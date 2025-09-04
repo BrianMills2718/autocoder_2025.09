@@ -1,0 +1,77 @@
+"""ApiSource component for walking skeleton."""
+import anyio
+import time
+from typing import Dict, Any, List
+from autocoder_cc.components.primitives.base import Source
+from autocoder_cc.ports.base import OutputPort
+from autocoder_cc.observability import get_logger
+
+class ApiSource(Source):
+    """Generate API requests for testing."""
+    
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.logger = get_logger(f"ApiSource.{name}")
+        self.output_port = OutputPort(f"{name}.raw_requests")
+        self.batch_size = config.get('batch_size', 100)
+        self.operations = ["CREATE", "READ", "UPDATE"]
+        self.generated_count = 0
+        
+    async def setup(self):
+        """Setup the source."""
+        self.logger.info(f"Setting up ApiSource {self.name}")
+        
+    async def generate_batch(self, operation_counts: Dict[str, int]) -> List[Dict[str, Any]]:
+        """Generate a batch of API requests."""
+        batch = []
+        
+        for operation, count in operation_counts.items():
+            for i in range(count):
+                request = {
+                    'id': f'req_{self.generated_count}',
+                    'operation': operation,
+                    'resource': f'/api/items/{self.generated_count % 100}',
+                    'data': {
+                        'field1': f'value_{self.generated_count}',
+                        'field2': self.generated_count,
+                        'timestamp': time.time()
+                    },
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Request-ID': f'req_{self.generated_count}'
+                    }
+                }
+                batch.append(request)
+                self.generated_count += 1
+                
+        return batch
+    
+    async def generate(self, total_messages: int, distribution: Dict[str, int]):
+        """Generate all messages according to distribution."""
+        self.logger.info(f"Generating {total_messages} messages")
+        
+        # Send messages in batches
+        remaining = distribution.copy()
+        
+        while sum(remaining.values()) > 0:
+            # Calculate batch distribution
+            batch_dist = {}
+            for op, count in remaining.items():
+                batch_count = min(count, self.batch_size // len(remaining))
+                if batch_count > 0:
+                    batch_dist[op] = batch_count
+                    remaining[op] -= batch_count
+            
+            # Generate and send batch
+            batch = await self.generate_batch(batch_dist)
+            for message in batch:
+                sent = await self.output_port.send(message)
+                if sent == 0:
+                    self.logger.warning(f"Failed to send message {message['id']}")
+        
+        self.logger.info(f"Generated {self.generated_count} messages")
+    
+    async def cleanup(self):
+        """Cleanup the source."""
+        self.output_port.disconnect()
+        self.logger.info(f"Cleaned up ApiSource {self.name}")

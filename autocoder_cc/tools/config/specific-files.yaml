@@ -1,0 +1,67 @@
+# Specific Files Verification Configuration
+# Only include the exact files needed for validation
+
+project_name: "AutoCoder4_CC Specific Files Verification"
+project_path: "."
+output_format: "xml"
+output_file: "gemini-specific-files.md"
+keep_repomix: false
+
+# Extreme ignore patterns - only include specific files
+ignore_patterns:
+  - "*"
+  - "!tools/production_validation.py"
+  - "!tools/independent_verification.py"
+  - "!tools/exception_audit_tool.py"
+  - "!tools/test_coverage_analysis.py"
+  - "!blueprint_language/system_generator.py"
+  - "!Evidence.md"
+  - "!CLAUDE.md"
+
+# Only include evidence file
+documentation_files:
+  - "./Evidence.md"
+
+# Focused claims for specific files
+claims_of_success: |
+  SPECIFIC FILE VALIDATION CLAIMS:
+  
+  ## FILE-SPECIFIC CLAIMS:
+  
+  1. **tools/production_validation.py**
+     CLAIM: "627-line production validation framework that validates 6 critical components"
+     VERIFY: File exists, contains ProductionValidationFramework class, validates LiveIndustryBenchmarkCollector, ServiceConnector, RealMessageBrokerTester, ProductionIstioServiceMesh, ProductionExceptionAuditor, CompleteChaosEngineer
+     
+  2. **tools/independent_verification.py**
+     CLAIM: "503-line independent verification framework with 100% verification integrity"
+     VERIFY: File exists, contains IndependentVerificationFramework class, external validation sources
+     
+  3. **tools/exception_audit_tool.py**
+     CLAIM: "726-line exception audit tool with AST semantic analysis"
+     VERIFY: File exists, contains SemanticExceptionAnalyzer class, AST analysis
+     
+  4. **tools/test_coverage_analysis.py**
+     CLAIM: "360-line test coverage analysis tool"
+     VERIFY: File exists, contains TestCoverageAnalyzer class, coverage analysis
+     
+  5. **blueprint_language/system_generator.py**
+     CLAIM: "Dynamic API-driven benchmark calculations with no hardcoded values"
+     VERIFY: File contains LiveIndustryBenchmarkCollector with real GitHub API calls
+     
+  6. **Evidence.md**
+     CLAIM: "Comprehensive evidence with independently verifiable results"
+     VERIFY: File contains actual execution results with timestamps, reproducible commands
+
+# Simple validation prompt
+custom_prompt: |
+  Validate these specific implementation files against the claims made about them.
+  
+  For each file, confirm:
+  1. Does it exist?
+  2. Does it contain the claimed implementation?
+  3. Is it complete (no stubs/placeholders)?
+  4. Does it match the described functionality?
+  
+  Focus on the 6 files mentioned in the claims.
+  Rate each file: Complete/Partial/Missing
+  Overall assessment: Production Ready/Needs Work/Not Ready

@@ -1,0 +1,12 @@
+{
+  "hybrid_architecture": false,
+  "self_healing": false,
+  "validation_framework": false,
+  "llm_generation": true,
+  "end_to_end": false,
+  "errors": [
+    "Hybrid test error: 'ComponentTestResult' object has no attribute 'setup_passed'",
+    "Healing test error: 'ParsedBinding' object has no attribute 'source_component'",
+    "E2E test error: 'ComponentTestResult' object has no attribute 'setup_passed'"
+  ]
+}

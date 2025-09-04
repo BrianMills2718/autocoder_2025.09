@@ -1,0 +1,284 @@
+metadata:
+  version: "1.0.0"
+  description: "Generate Store component implementation for data persistence"
+  author: "autocoder-team"
+  tags: ["component", "store", "database", "persistence"]
+
+variables:
+  - name: component_name
+    description: "Name of the Store component"
+    required: true
+  - name: blueprint_context
+    description: "Full system blueprint context for understanding relationships"
+    required: true
+  - name: ports
+    description: "Component port configuration (input/output)"
+    required: true
+  - name: config
+    description: "Component configuration parameters"
+    required: true
+  - name: database_type
+    description: "Type of database (postgresql, redis, etc.)"
+    required: false
+    default: "postgresql"
+
+prompt: |
+  Generate a Python implementation for a Store component with the following specification:
+  
+  Component Name: {{ component_name }}
+  Database Type: {{ database_type }}
+  
+  System Context:
+  {{ blueprint_context }}
+  
+  Port Configuration:
+  Input Ports: {{ ports.input | join(', ') }}
+  Output Ports: {{ ports.output | join(', ') }}
+  
+  Configuration:
+  {% for key, value in config.items() %}
+  - {{ key }}: {{ value }}
+  {% endfor %}
+  
+  Requirements:
+  1. Import all necessary dependencies at the top of the file
+  2. Inherit from the Store base class (from autocoder_cc.components.store import Store)
+  3. Implement proper initialization with configuration handling
+  4. Implement the store() method for data persistence
+  5. Implement the retrieve() method for data retrieval
+  6. Implement query() method for searching data
+  7. Add connection management (initialize/cleanup)
+  8. Include comprehensive error handling with try/except blocks
+  9. Add logging for debugging (use self.logger)
+  10. Follow async/await patterns for all I/O operations
+  11. Use type hints for all methods
+  12. Include docstrings for the class and all public methods
+  
+  {% if database_type == "postgresql" %}
+  Use asyncpg for PostgreSQL connections and proper connection pooling.
+  {% elif database_type == "redis" %}
+  Use aioredis for Redis connections with proper connection management.
+  {% endif %}
+  
+  Generate ONLY the Python code implementation. Do not include explanations or markdown formatting.
+
+examples:
+  - input:
+      component_name: "CustomerDataStore"
+      blueprint_context: |
+        System: Customer Analytics Platform
+        Purpose: Track and analyze customer behavior
+        Components:
+          - CustomerDataStore: Stores customer profiles and events
+          - EventProcessor: Processes incoming events
+          - AnalyticsEngine: Generates insights
+      ports:
+        input: ["customer_data_in", "event_in"]
+        output: ["customer_data_out", "query_result_out"]
+      config:
+        database_url: "postgresql://localhost/customers"
+        table_name: "customer_profiles"
+        max_connections: 20
+      database_type: "postgresql"
+    output: |
+      import asyncio
+      import asyncpg
+      import json
+      from typing import Dict, Any, Optional, List
+      from datetime import datetime
+      import logging
+      
+      from autocoder_cc.components.store import Store
+      
+      
+      class CustomerDataStore(Store):
+          """Store component for managing customer profiles and events."""
+          
+          def __init__(self, config: Dict[str, Any]):
+              """Initialize the CustomerDataStore with configuration."""
+              super().__init__(config)
+              self.database_url = config.get("database_url", "postgresql://localhost/customers")
+              self.table_name = config.get("table_name", "customer_profiles")
+              self.max_connections = config.get("max_connections", 20)
+              self.pool: Optional[asyncpg.Pool] = None
+              self.logger = logging.getLogger(self.__class__.__name__)
+              
+          async def initialize(self) -> None:
+              """Initialize database connection pool."""
+              try:
+                  self.logger.info(f"Initializing connection pool to {self.database_url}")
+                  self.pool = await asyncpg.create_pool(
+                      self.database_url,
+                      min_size=1,
+                      max_size=self.max_connections
+                  )
+                  
+                  # Create table if it doesn't exist
+                  async with self.pool.acquire() as conn:
+                      await conn.execute(f"""
+                          CREATE TABLE IF NOT EXISTS {self.table_name} (
+                              id SERIAL PRIMARY KEY,
+                              customer_id VARCHAR(255) UNIQUE NOT NULL,
+                              data JSONB NOT NULL,
+                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                          )
+                      """)
+                      
+                      # Create index on customer_id for faster lookups
+                      await conn.execute(f"""
+                          CREATE INDEX IF NOT EXISTS idx_{self.table_name}_customer_id 
+                          ON {self.table_name}(customer_id)
+                      """)
+                      
+                  self.logger.info("Database initialization complete")
+                  
+              except Exception as e:
+                  self.logger.error(f"Failed to initialize database: {e}")
+                  raise
+                  
+          async def cleanup(self) -> None:
+              """Cleanup database connections."""
+              if self.pool:
+                  await self.pool.close()
+                  self.logger.info("Connection pool closed")
+                  
+          async def store(self, key: str, data: Dict[str, Any]) -> None:
+              """Store customer data with the given key."""
+              if not self.pool:
+                  raise RuntimeError("Database pool not initialized")
+                  
+              try:
+                  async with self.pool.acquire() as conn:
+                      await conn.execute(f"""
+                          INSERT INTO {self.table_name} (customer_id, data, updated_at) 
+                          VALUES ($1, $2, CURRENT_TIMESTAMP)
+                          ON CONFLICT (customer_id) 
+                          DO UPDATE SET 
+                              data = EXCLUDED.data,
+                              updated_at = CURRENT_TIMESTAMP
+                      """, key, json.dumps(data))
+                      
+                  self.logger.debug(f"Stored data for customer: {key}")
+                  
+                  # Send to output port
+                  await self.send_to_port("customer_data_out", {
+                      "action": "stored",
+                      "customer_id": key,
+                      "timestamp": datetime.now().isoformat()
+                  })
+                  
+              except Exception as e:
+                  self.logger.error(f"Failed to store data for {key}: {e}")
+                  raise
+                  
+          async def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
+              """Retrieve customer data by key."""
+              if not self.pool:
+                  raise RuntimeError("Database pool not initialized")
+                  
+              try:
+                  async with self.pool.acquire() as conn:
+                      row = await conn.fetchrow(f"""
+                          SELECT data, created_at, updated_at 
+                          FROM {self.table_name} 
+                          WHERE customer_id = $1
+                      """, key)
+                      
+                  if row:
+                      result = {
+                          "data": json.loads(row["data"]),
+                          "created_at": row["created_at"].isoformat(),
+                          "updated_at": row["updated_at"].isoformat()
+                      }
+                      self.logger.debug(f"Retrieved data for customer: {key}")
+                      return result
+                  else:
+                      self.logger.debug(f"No data found for customer: {key}")
+                      return None
+                      
+              except Exception as e:
+                  self.logger.error(f"Failed to retrieve data for {key}: {e}")
+                  raise
+                  
+          async def query(self, filter_params: Dict[str, Any]) -> List[Dict[str, Any]]:
+              """Query customer data based on filter parameters."""
+              if not self.pool:
+                  raise RuntimeError("Database pool not initialized")
+                  
+              try:
+                  # Build query based on filter parameters
+                  where_clauses = []
+                  params = []
+                  param_count = 1
+                  
+                  for key, value in filter_params.items():
+                      where_clauses.append(f"data->>${param_count} = ${param_count + 1}")
+                      params.extend([key, str(value)])
+                      param_count += 2
+                      
+                  where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+                  
+                  query = f"""
+                      SELECT customer_id, data, created_at, updated_at 
+                      FROM {self.table_name} 
+                      WHERE {where_clause}
+                      ORDER BY updated_at DESC
+                      LIMIT 100
+                  """
+                  
+                  async with self.pool.acquire() as conn:
+                      rows = await conn.fetch(query, *params)
+                      
+                  results = []
+                  for row in rows:
+                      results.append({
+                          "customer_id": row["customer_id"],
+                          "data": json.loads(row["data"]),
+                          "created_at": row["created_at"].isoformat(),
+                          "updated_at": row["updated_at"].isoformat()
+                      })
+                      
+                  self.logger.info(f"Query returned {len(results)} results")
+                  
+                  # Send results to output port
+                  await self.send_to_port("query_result_out", {
+                      "results": results,
+                      "count": len(results),
+                      "timestamp": datetime.now().isoformat()
+                  })
+                  
+                  return results
+                  
+              except Exception as e:
+                  self.logger.error(f"Failed to query data: {e}")
+                  raise
+                  
+          async def handle_port_data(self, port_name: str, data: Any) -> None:
+              """Handle incoming data from ports."""
+              try:
+                  if port_name == "customer_data_in":
+                      # Store incoming customer data
+                      customer_id = data.get("customer_id")
+                      customer_data = data.get("data", {})
+                      if customer_id:
+                          await self.store(customer_id, customer_data)
+                          
+                  elif port_name == "event_in":
+                      # Handle customer events
+                      event_type = data.get("event_type")
+                      customer_id = data.get("customer_id")
+                      
+                      if event_type == "query":
+                          # Perform query based on event data
+                          filter_params = data.get("filter", {})
+                          await self.query(filter_params)
+                      elif event_type == "retrieve" and customer_id:
+                          # Retrieve specific customer
+                          result = await self.retrieve(customer_id)
+                          if result:
+                              await self.send_to_port("customer_data_out", result)
+                              
+              except Exception as e:
+                  self.logger.error(f"Error handling port {port_name} data: {e}")
+                  raise

@@ -1,0 +1,31 @@
+    async def process_item(self, item):
+        """Route actions to appropriate handlers"""
+        with self.tracer.start_as_current_span("process_item") as span:
+            span.set_attribute("component.name", self.name)
+            span.set_attribute("item.action", item.get("action"))
+
+            action = item.get("action")
+            try:
+                if action == "add_item":
+                    if not all(k in item for k in ["title", "description"]):
+                        return {"status": "error", "message": "Missing 'title' or 'description' for add_item"}
+                    return await self.add_item(item.get("title"), item.get("description"))
+                elif action == "get_item":
+                    if "item_id" not in item:
+                        return {"status": "error", "message": "Missing 'item_id' for get_item"}
+                    return await self.get_item(item.get("item_id"))
+                elif action == "update_item":
+                    if not all(k in item for k in ["item_id", "update_data"]):
+                        return {"status": "error", "message": "Missing 'item_id' or 'update_data' for update_item"}
+                    return await self.update_item(item.get("item_id"), item.get("update_data"))
+                elif action == "delete_item":
+                    if "item_id" not in item:
+                        return {"status": "error", "message": "Missing 'item_id' for delete_item"}
+                    return await self.delete_item(item.get("item_id"))
+                elif action == "list_items":
+                    return await self.list_items()
+                else:
+                    self.logger.warning(f"Unknown action received: {action}")
+                    return {"status": "error", "message": f"Unknown action: {action}"}
+            except Exception as e:
+                self.handle_error(e, context=f"Error processing action '{action}'")

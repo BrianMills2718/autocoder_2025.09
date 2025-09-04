@@ -1,0 +1,36 @@
+system:
+  name: todo_system_reference
+  version: 1.0.0
+  description: Reference implementation of a todo system
+
+components:
+  task_store:
+    type: Store
+    config:
+      storage_type: memory  # Options: memory, file, sqlite, postgres
+      # For file storage:
+      # storage_path: ./data/tasks.json
+      # For database storage:
+      # database:
+      #   host: localhost
+      #   port: 5432
+      #   name: todo_db
+      #   user: todo_user
+      #   password: todo_pass
+
+  task_api:
+    type: APIEndpoint  
+    config:
+      port: 8080
+      host: 0.0.0.0
+      
+bindings:
+  - source: task_api
+    target: task_store
+    protocol: direct  # Direct method calls
+    
+# Deployment configuration
+deployment:
+  type: local
+  auto_restart: false
+  health_check_interval: 30

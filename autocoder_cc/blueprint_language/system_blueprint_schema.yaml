@@ -1,0 +1,713 @@
+# Autocoder 5.2.0 System Blueprint Language Schema
+# Extension to blueprint_schema.yaml for complete system generation
+
+# Root system blueprint structure
+SystemBlueprint:
+  type: object
+  required: [system, schema_version]
+  properties:
+    # Schema version for migration support (Enterprise Roadmap v3 Phase 1)
+    schema_version:
+      type: string
+      description: "Version of the system blueprint schema for safe evolution"
+      pattern: "^\\d+\\.\\d+\\.\\d+$"
+      example: "1.0.0"
+    
+    system:
+      $ref: "#/definitions/System"
+    
+    # Global metadata for the system
+    metadata:
+      $ref: "#/definitions/SystemMetadata"
+    
+    # Global schema definitions shared across components
+    schemas:
+      type: object
+      additionalProperties:
+        $ref: "#/definitions/Schema"
+
+definitions:
+  # Complete system definition
+  System:
+    type: object
+    required: [name, components, bindings]
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "System name in snake_case"
+        
+      description:
+        type: string
+        description: "Natural language description of the system"
+        
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+        description: "System version (semver)"
+        
+      # All components in the system
+      components:
+        type: array
+        items:
+          $ref: "#/definitions/SystemComponent"
+        minItems: 1
+        description: "All components that make up this system"
+        
+      # Connections between components
+      bindings:
+        type: array
+        items:
+          $ref: "#/definitions/ComponentBinding"
+        description: "Data flow connections between components"
+        
+      # System-wide configuration
+      configuration:
+        $ref: "#/definitions/SystemConfiguration"
+        description: "Global system configuration"
+        
+      # System deployment specification
+      deployment:
+        $ref: "#/definitions/DeploymentConfiguration"
+        description: "How the system should be deployed"
+        
+      # System-wide validation requirements
+      validation:
+        $ref: "#/definitions/SystemValidation"
+        description: "System-level validation and performance requirements"
+
+  # Component definition within a system
+  SystemComponent:
+    type: object
+    required: [name, type, processing_mode]
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Component name in snake_case"
+        
+      type:
+        type: string
+        enum: 
+          - "Source"
+          - "Transformer" 
+          - "Accumulator"
+          - "Store"
+          - "Controller"
+          - "Sink"
+          - "StreamProcessor"
+          - "Model"
+          - "APIEndpoint"
+          - "Router"
+        description: "Component base type"
+        
+      description:
+        type: string
+        description: "Component description"
+        
+      processing_mode:
+        type: string
+        enum: ["batch", "stream", "hybrid"]
+        description: "Data processing approach"
+        
+      # Component interface definition
+      inputs:
+        type: array
+        items:
+          $ref: "#/definitions/ComponentPort"
+        description: "Component input ports"
+        
+      outputs:
+        type: array
+        items:
+          $ref: "#/definitions/ComponentPort"
+        description: "Component output ports"
+        
+      # Validation rules
+      properties:
+        type: array
+        items:
+          $ref: "#/definitions/PropertyConstraint"
+        description: "Output property validation rules"
+        
+      contracts:
+        type: array
+        items:
+          $ref: "#/definitions/ContractConstraint"
+        description: "Input/output contract validation rules"
+        
+      # Resource requirements
+      resources:
+        $ref: "#/definitions/ComponentResources"
+        description: "External resource requirements"
+        
+      # Component-specific configuration
+      configuration:
+        type: object
+        description: "Component-specific configuration"
+        
+      # External dependencies
+      dependencies:
+        type: array
+        items:
+          type: string
+        description: "External service dependencies"
+        
+      # Implementation details
+      implementation:
+        $ref: "#/definitions/ComponentImplementation"
+        description: "Code generation specifications"
+        
+      # Observability configuration
+      observability:
+        $ref: "#/definitions/ComponentObservability"
+        description: "Monitoring and logging configuration"
+
+  # Component port definition
+  ComponentPort:
+    type: object
+    required: [name, schema]
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Port name"
+        
+      schema:
+        type: string
+        description: "Reference to schema definition"
+        
+      required:
+        type: boolean
+        default: true
+        description: "Whether this port is required"
+        
+      description:
+        type: string
+        description: "Port description"
+        
+      # Data flow properties
+      flow_type:
+        type: string
+        enum: ["push", "pull", "request_response"]
+        default: "push"
+        description: "How data flows through this port"
+        
+      batch_size:
+        type: integer
+        minimum: 1
+        description: "Batch size for batch processing"
+
+  # Connection between components
+  ComponentBinding:
+    type: object
+    required: [from, to]
+    properties:
+      from:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        description: "Source component.port (e.g., 'webhook_receiver.output')"
+        
+      to:
+        oneOf:
+          - type: string
+            pattern: "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            description: "Target component.port (e.g., 'fraud_scorer.input')"
+          - type: array
+            items:
+              type: string
+              pattern: "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            description: "Multiple target ports for fan-out"
+            
+      # Binding configuration
+      transformation:
+        type: string
+        description: "Optional data transformation between components"
+        
+      condition:
+        type: string
+        description: "Optional condition for conditional routing"
+        
+      # Error handling
+      error_handling:
+        type: object
+        properties:
+          strategy:
+            type: string
+            enum: ["retry", "dead_letter", "ignore", "circuit_breaker"]
+            default: "retry"
+          retry_count:
+            type: integer
+            default: 3
+          timeout_ms:
+            type: integer
+            default: 5000
+            
+      # Quality of service
+      qos:
+        type: object
+        properties:
+          delivery_guarantee:
+            type: string
+            enum: ["at_most_once", "at_least_once", "exactly_once"]
+            default: "at_least_once"
+          ordering:
+            type: boolean
+            default: false
+          buffering:
+            type: integer
+            description: "Buffer size for async processing"
+
+  # System-wide configuration
+  SystemConfiguration:
+    type: object
+    properties:
+      # Environment settings
+      environment:
+        type: string
+        enum: ["development", "staging", "production"]
+        default: "development"
+        
+      # Global timeouts
+      timeouts:
+        type: object
+        properties:
+          startup_timeout_ms:
+            type: integer
+            default: 30000
+          shutdown_timeout_ms:
+            type: integer
+            default: 10000
+          health_check_timeout_ms:
+            type: integer
+            default: 5000
+            
+      # Resource limits
+      resource_limits:
+        type: object
+        properties:
+          max_memory_mb:
+            type: integer
+          max_cpu_cores:
+            type: number
+          max_connections:
+            type: integer
+            
+      # Logging configuration
+      logging:
+        type: object
+        properties:
+          level:
+            type: string
+            enum: ["DEBUG", "INFO", "WARNING", "ERROR"]
+            default: "INFO"
+          format:
+            type: string
+            enum: ["json", "text"]
+            default: "json"
+          output:
+            type: string
+            enum: ["stdout", "file", "syslog"]
+            default: "stdout"
+
+  # Deployment configuration
+  DeploymentConfiguration:
+    type: object
+    required: [platform]
+    properties:
+      platform:
+        type: string
+        enum: ["docker", "kubernetes", "aws_lambda", "azure_functions", "local"]
+        description: "Target deployment platform"
+        
+      # External services required
+      external_services:
+        type: array
+        items:
+          type: object
+          required: [name, type]
+          properties:
+            name:
+              type: string
+            type:
+              type: string
+              enum: ["postgresql", "mysql", "redis", "kafka", "elasticsearch", "mongodb"]
+            version:
+              type: string
+            configuration:
+              type: object
+              
+      # Networking configuration
+      networking:
+        type: object
+        properties:
+          expose_ports:
+            type: array
+            items:
+              type: integer
+          internal_network:
+            type: string
+          load_balancer:
+            type: boolean
+            default: false
+            
+      # Scaling configuration
+      scaling:
+        type: object
+        properties:
+          min_instances:
+            type: integer
+            default: 1
+          max_instances:
+            type: integer
+            default: 10
+          auto_scaling:
+            type: boolean
+            default: false
+          metrics:
+            type: array
+            items:
+              type: string
+              enum: ["cpu", "memory", "requests_per_second", "queue_length"]
+
+  # System validation requirements
+  SystemValidation:
+    type: object
+    properties:
+      # Performance requirements
+      performance:
+        type: object
+        properties:
+          throughput_requests_per_second:
+            type: integer
+          latency_p95_ms:
+            type: integer
+          latency_p99_ms:
+            type: integer
+          availability_percentage:
+            type: number
+            minimum: 0.0
+            maximum: 100.0
+            
+      # End-to-end test configuration
+      end_to_end_tests:
+        type: boolean
+        default: true
+        
+      # Load testing
+      load_testing:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: false
+          duration_minutes:
+            type: integer
+            default: 5
+          concurrent_users:
+            type: integer
+            default: 100
+            
+      # Sample data for testing
+      sample_data:
+        type: object
+        properties:
+          auto_generate:
+            type: boolean
+            default: true
+          custom_samples:
+            type: array
+            items:
+              type: object
+              required: [component, input_data]
+              properties:
+                component:
+                  type: string
+                input_data:
+                  type: object
+
+  # Component resource requirements
+  ComponentResources:
+    type: object
+    properties:
+      # Port requirements
+      ports:
+        type: array
+        items:
+          type: object
+          required: [port, protocol]
+          properties:
+            port:
+              type: integer
+              minimum: 1024
+              maximum: 65535
+            protocol:
+              type: string
+              enum: ["HTTP", "HTTPS", "TCP", "UDP", "WebSocket", "gRPC"]
+            public:
+              type: boolean
+              default: false
+              
+      # Database connections
+      databases:
+        type: array
+        items:
+          type: object
+          required: [type, connection_string]
+          properties:
+            type:
+              type: string
+              enum: ["postgresql", "mysql", "redis", "mongodb"]
+            connection_string:
+              type: string
+            pool_size:
+              type: integer
+              default: 10
+            ssl_required:
+              type: boolean
+              default: false
+              
+      # Message queue connections
+      message_queues:
+        type: array
+        items:
+          type: object
+          required: [type, brokers]
+          properties:
+            type:
+              type: string
+              enum: ["kafka", "rabbitmq", "redis_pubsub", "aws_sqs"]
+            brokers:
+              type: array
+              items:
+                type: string
+            topics:
+              type: array
+              items:
+                type: string
+            consumer_group:
+              type: string
+              
+      # External HTTP services
+      external_services:
+        type: array
+        items:
+          type: object
+          required: [name, endpoint]
+          properties:
+            name:
+              type: string
+            endpoint:
+              type: string
+            protocol:
+              type: string
+              enum: ["HTTP", "gRPC", "WebSocket"]
+            authentication:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: ["none", "api_key", "oauth2", "basic_auth"]
+                config:
+                  type: object
+
+  # Implementation specification
+  ComponentImplementation:
+    type: object
+    required: [language]
+    properties:
+      language:
+        type: string
+        enum: ["python", "javascript", "java", "go", "rust"]
+        default: "python"
+        
+      custom_logic:
+        type: string
+        description: "Custom implementation code"
+        
+      imports:
+        type: array
+        items:
+          type: string
+        description: "Additional imports required"
+        
+      methods:
+        type: object
+        additionalProperties:
+          type: string
+        description: "Custom method implementations"
+        
+      # Dependencies
+      dependencies:
+        type: array
+        items:
+          type: object
+          required: [name, version]
+          properties:
+            name:
+              type: string
+            version:
+              type: string
+            source:
+              type: string
+              enum: ["pypi", "npm", "maven", "cargo"]
+
+  # Component observability
+  ComponentObservability:
+    type: object
+    properties:
+      level:
+        type: string
+        enum: ["basic", "detailed", "debug"]
+        default: "basic"
+        
+      custom_metrics:
+        type: array
+        items:
+          type: object
+          required: [name, type]
+          properties:
+            name:
+              type: string
+            type:
+              type: string
+              enum: ["counter", "gauge", "histogram", "summary"]
+            description:
+              type: string
+            labels:
+              type: array
+              items:
+                type: string
+                
+      # Distributed tracing
+      tracing:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: true
+          sample_rate:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            default: 1.0
+          exporter:
+            type: string
+            enum: ["jaeger", "zipkin", "otlp"]
+            default: "jaeger"
+            
+      # Health checks
+      health_checks:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: true
+          endpoint:
+            type: string
+            default: "/health"
+          interval_seconds:
+            type: integer
+            default: 30
+
+  # Property validation constraint
+  PropertyConstraint:
+    type: object
+    required: [constraint, description]
+    properties:
+      constraint:
+        type: string
+        description: "Python expression for property validation"
+        
+      description:
+        type: string
+        description: "Human-readable constraint description"
+        
+      severity:
+        type: string
+        enum: ["error", "warning"]
+        default: "error"
+
+  # Contract validation constraint
+  ContractConstraint:
+    type: object
+    required: [expression, description]
+    properties:
+      expression:
+        type: string
+        description: "Python expression relating inputs and outputs"
+        
+      description:
+        type: string
+        description: "Human-readable contract description"
+
+  # Schema definition (reused from component schema)
+  Schema:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        enum: ["object", "array", "string", "number", "integer", "boolean"]
+        
+      properties:
+        type: object
+        additionalProperties:
+          $ref: "#/definitions/Schema"
+          
+      required:
+        type: array
+        items:
+          type: string
+          
+      items:
+        $ref: "#/definitions/Schema"
+        
+      format:
+        type: string
+        
+      minimum:
+        type: number
+        
+      maximum:
+        type: number
+        
+      pattern:
+        type: string
+
+  # System metadata
+  SystemMetadata:
+    type: object
+    properties:
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+        description: "System version (semver)"
+        
+      author:
+        type: string
+        description: "System author"
+        
+      description:
+        type: string
+        description: "System description"
+        
+      tags:
+        type: array
+        items:
+          type: string
+        description: "Classification tags"
+        
+      created:
+        type: string
+        format: "date-time"
+        description: "Creation timestamp"
+        
+      autocoder_version:
+        type: string
+        description: "Required Autocoder version"
+        
+      # Natural language source
+      natural_language_description:
+        type: string
+        description: "Original natural language description"

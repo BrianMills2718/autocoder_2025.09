@@ -1,0 +1,548 @@
+#!/usr/bin/env python3
+"""
+Type Safety Enforcement - P0.8-E1 Type Safety Implementation
+
+Implements strict typing and interface validation for enhanced component composition.
+"""
+import anyio
+import inspect
+from typing import Dict, Any, List, Optional, Type, TypeVar, Generic, Union, get_type_hints, get_origin, get_args
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from enum import Enum
+import re
+
+from autocoder_cc.observability import get_logger, get_metrics_collector, get_tracer
+
+logger = get_logger(__name__)
+T = TypeVar('T')
+U = TypeVar('U')
+
+
+class TypeValidationLevel(Enum):
+    """Levels of type validation strictness"""
+    NONE = "none"          # No type validation
+    BASIC = "basic"        # Basic type checking
+    STRICT = "strict"      # Strict type validation with full introspection
+    RUNTIME = "runtime"    # Runtime type checking with performance monitoring
+
+
+@dataclass
+class TypeValidationError:
+    """Represents a type validation error"""
+    component_name: str
+    method_name: str
+    parameter_name: str
+    expected_type: str
+    actual_type: str
+    error_message: str
+    severity: str = "error"
+
+
+@dataclass
+class InterfaceSpec:
+    """Specification for component interface"""
+    name: str
+    methods: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    properties: Dict[str, Type] = field(default_factory=dict)
+    base_classes: List[Type] = field(default_factory=list)
+    type_constraints: Dict[str, Any] = field(default_factory=dict)
+
+
+class TypeSafetyValidator:
+    """Core type safety validator for component interfaces"""
+    
+    def __init__(self, validation_level: TypeValidationLevel = TypeValidationLevel.STRICT):
+        self.validation_level = validation_level
+        self.validation_errors: List[TypeValidationError] = []
+        self.metrics_collector = get_metrics_collector("type_safety")
+        self.tracer = get_tracer("type_safety")
+        
+    def validate_component_interface(self, component: Any, interface_spec: InterfaceSpec) -> List[TypeValidationError]:
+        """Validate that a component conforms to its interface specification"""
+        errors = []
+        
+        with self.tracer.span("validate_component_interface") as span_id:
+            # Validate component has required methods
+            for method_name, method_spec in interface_spec.methods.items():
+                if not hasattr(component, method_name):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name=method_name,
+                        parameter_name="method",
+                        expected_type="method",
+                        actual_type="missing",
+                        error_message=f"Required method '{method_name}' is missing"
+                    ))
+                    continue
+                
+                method = getattr(component, method_name)
+                if not callable(method):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name=method_name,
+                        parameter_name="method",
+                        expected_type="callable",
+                        actual_type=type(method).__name__,
+                        error_message=f"'{method_name}' is not callable"
+                    ))
+                    continue
+                
+                # Validate method signature
+                method_errors = self._validate_method_signature(component, method_name, method, method_spec)
+                errors.extend(method_errors)
+            
+            # Validate component has required properties
+            for prop_name, prop_type in interface_spec.properties.items():
+                if not hasattr(component, prop_name):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name="property",
+                        parameter_name=prop_name,
+                        expected_type=str(prop_type),
+                        actual_type="missing",
+                        error_message=f"Required property '{prop_name}' is missing"
+                    ))
+                    continue
+                
+                # Validate property type if strict validation is enabled
+                if self.validation_level == TypeValidationLevel.STRICT:
+                    prop_value = getattr(component, prop_name)
+                    if not self._is_type_compatible(prop_value, prop_type):
+                        errors.append(TypeValidationError(
+                            component_name=getattr(component, '__name__', str(component)),
+                            method_name="property",
+                            parameter_name=prop_name,
+                            expected_type=str(prop_type),
+                            actual_type=type(prop_value).__name__,
+                            error_message=f"Property '{prop_name}' has incorrect type"
+                        ))
+            
+            # Validate inheritance hierarchy
+            for base_class in interface_spec.base_classes:
+                if not isinstance(component, base_class):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name="inheritance",
+                        parameter_name="base_class",
+                        expected_type=str(base_class),
+                        actual_type=str(type(component)),
+                        error_message=f"Component does not inherit from required base class {base_class}"
+                    ))
+        
+        self.validation_errors.extend(errors)
+        # Record validation errors as business events
+        if errors:
+            self.metrics_collector.record_business_event("validation_error", len(errors))
+        return errors
+    
+    def _validate_method_signature(self, component: Any, method_name: str, method: callable, method_spec: Dict[str, Any]) -> List[TypeValidationError]:
+        """Validate method signature against specification"""
+        errors = []
+        
+        try:
+            # Get method signature
+            sig = inspect.signature(method)
+            type_hints = get_type_hints(method)
+            
+            # Validate parameters
+            expected_params = method_spec.get('parameters', {})
+            for param_name, param_spec in expected_params.items():
+                if param_name not in sig.parameters:
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name=method_name,
+                        parameter_name=param_name,
+                        expected_type=str(param_spec.get('type', 'Any')),
+                        actual_type="missing",
+                        error_message=f"Parameter '{param_name}' is missing from method signature"
+                    ))
+                    continue
+                
+                # Validate parameter type annotation
+                param = sig.parameters[param_name]
+                expected_type = param_spec.get('type')
+                if expected_type and param_name in type_hints:
+                    actual_type = type_hints[param_name]
+                    if not self._is_type_compatible(actual_type, expected_type):
+                        errors.append(TypeValidationError(
+                            component_name=getattr(component, '__name__', str(component)),
+                            method_name=method_name,
+                            parameter_name=param_name,
+                            expected_type=str(expected_type),
+                            actual_type=str(actual_type),
+                            error_message=f"Parameter '{param_name}' has incorrect type annotation"
+                        ))
+            
+            # Validate return type
+            expected_return_type = method_spec.get('return_type')
+            if expected_return_type and 'return' in type_hints:
+                actual_return_type = type_hints['return']
+                if not self._is_type_compatible(actual_return_type, expected_return_type):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name=method_name,
+                        parameter_name="return",
+                        expected_type=str(expected_return_type),
+                        actual_type=str(actual_return_type),
+                        error_message=f"Return type is incorrect"
+                    ))
+        
+        except Exception as e:
+            errors.append(TypeValidationError(
+                component_name=getattr(component, '__name__', str(component)),
+                method_name=method_name,
+                parameter_name="signature",
+                expected_type="valid_signature",
+                actual_type="error",
+                error_message=f"Failed to validate method signature: {e}"
+            ))
+        
+        return errors
+    
+    def _is_type_compatible(self, actual_value_or_type: Any, expected_type: Type) -> bool:
+        """Check if actual type is compatible with expected type"""
+        if self.validation_level == TypeValidationLevel.NONE:
+            return True
+        
+        # Handle actual values vs types
+        if not isinstance(actual_value_or_type, type):
+            actual_type = type(actual_value_or_type)
+            actual_value = actual_value_or_type
+        else:
+            actual_type = actual_value_or_type
+            actual_value = None
+        
+        # Basic type compatibility
+        if actual_type == expected_type:
+            return True
+        
+        # Handle Union types
+        if get_origin(expected_type) is Union:
+            union_args = get_args(expected_type)
+            return any(self._is_type_compatible(actual_type, arg) for arg in union_args)
+        
+        # Handle generic types
+        if hasattr(expected_type, '__origin__'):
+            if get_origin(actual_type) == get_origin(expected_type):
+                # For now, just check the origin types match
+                return True
+        
+        # Check inheritance
+        try:
+            return issubclass(actual_type, expected_type)
+        except TypeError:
+            # expected_type might not be a class
+            return False
+    
+    def validate_runtime_types(self, component: Any, method_name: str, args: tuple, kwargs: dict, return_value: Any = None) -> List[TypeValidationError]:
+        """Validate types at runtime during method execution"""
+        if self.validation_level not in [TypeValidationLevel.RUNTIME, TypeValidationLevel.STRICT]:
+            return []
+        
+        errors = []
+        
+        try:
+            method = getattr(component, method_name)
+            sig = inspect.signature(method)
+            type_hints = get_type_hints(method)
+            
+            # Validate arguments
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            
+            for param_name, value in bound_args.arguments.items():
+                if param_name in type_hints:
+                    expected_type = type_hints[param_name]
+                    if not self._is_type_compatible(value, expected_type):
+                        errors.append(TypeValidationError(
+                            component_name=getattr(component, '__name__', str(component)),
+                            method_name=method_name,
+                            parameter_name=param_name,
+                            expected_type=str(expected_type),
+                            actual_type=type(value).__name__,
+                            error_message=f"Runtime type mismatch for parameter '{param_name}'"
+                        ))
+            
+            # Validate return value
+            if return_value is not None and 'return' in type_hints:
+                expected_return_type = type_hints['return']
+                if not self._is_type_compatible(return_value, expected_return_type):
+                    errors.append(TypeValidationError(
+                        component_name=getattr(component, '__name__', str(component)),
+                        method_name=method_name,
+                        parameter_name="return",
+                        expected_type=str(expected_return_type),
+                        actual_type=type(return_value).__name__,
+                        error_message=f"Runtime type mismatch for return value"
+                    ))
+        
+        except Exception as e:
+            errors.append(TypeValidationError(
+                component_name=getattr(component, '__name__', str(component)),
+                method_name=method_name,
+                parameter_name="runtime",
+                expected_type="valid_execution",
+                actual_type="error",
+                error_message=f"Runtime validation failed: {e}"
+            ))
+        
+        self.validation_errors.extend(errors)
+        return errors
+    
+    def clear_errors(self):
+        """Clear accumulated validation errors"""
+        self.validation_errors.clear()
+    
+    def get_error_summary(self) -> Dict[str, Any]:
+        """Get summary of validation errors"""
+        error_counts = {}
+        severity_counts = {}
+        
+        for error in self.validation_errors:
+            # Count by component
+            comp_name = error.component_name
+            if comp_name not in error_counts:
+                error_counts[comp_name] = 0
+            error_counts[comp_name] += 1
+            
+            # Count by severity
+            severity = error.severity
+            if severity not in severity_counts:
+                severity_counts[severity] = 0
+            severity_counts[severity] += 1
+        
+        return {
+            "total_errors": len(self.validation_errors),
+            "error_counts_by_component": error_counts,
+            "error_counts_by_severity": severity_counts,
+            "validation_level": self.validation_level.value
+        }
+
+
+class TypeSafeComponentWrapper:
+    """Wrapper that adds runtime type checking to any component"""
+    
+    def __init__(self, component: Any, interface_spec: InterfaceSpec, validator: TypeSafetyValidator):
+        self._wrapped_component = component
+        self._interface_spec = interface_spec
+        self._validator = validator
+        self._tracer = get_tracer("type_safe_wrapper")
+        
+        # Validate interface at creation time
+        self._interface_errors = validator.validate_component_interface(component, interface_spec)
+        if self._interface_errors:
+            logger.warning(f"Component interface validation failed: {len(self._interface_errors)} errors")
+    
+    def __getattr__(self, name: str):
+        """Intercept method calls to add runtime type validation"""
+        attr = getattr(self._wrapped_component, name)
+        
+        if callable(attr) and name in self._interface_spec.methods:
+            return self._create_type_safe_method(name, attr)
+        
+        return attr
+    
+    def _create_type_safe_method(self, method_name: str, original_method: callable):
+        """Create a type-safe wrapper for a method"""
+        async def async_wrapper(*args, **kwargs):
+            with self._tracer.span(f"type_safe_{method_name}") as span_id:
+                # Validate input types
+                input_errors = self._validator.validate_runtime_types(
+                    self._wrapped_component, method_name, args, kwargs
+                )
+                
+                if input_errors and self._validator.validation_level == TypeValidationLevel.STRICT:
+                    error_msg = f"Type validation failed for {method_name}: {len(input_errors)} errors"
+                    logger.error(error_msg)
+                    raise TypeError(error_msg)
+                
+                # Execute original method
+                if asyncio.iscoroutinefunction(original_method):
+                    result = await original_method(*args, **kwargs)
+                else:
+                    result = original_method(*args, **kwargs)
+                
+                # Validate output types
+                output_errors = self._validator.validate_runtime_types(
+                    self._wrapped_component, method_name, args, kwargs, result
+                )
+                
+                if output_errors and self._validator.validation_level == TypeValidationLevel.STRICT:
+                    error_msg = f"Return type validation failed for {method_name}: {len(output_errors)} errors"
+                    logger.error(error_msg)
+                    raise TypeError(error_msg)
+                
+                return result
+        
+        def sync_wrapper(*args, **kwargs):
+            with self._tracer.span(f"type_safe_{method_name}") as span_id:
+                # Validate input types
+                input_errors = self._validator.validate_runtime_types(
+                    self._wrapped_component, method_name, args, kwargs
+                )
+                
+                if input_errors and self._validator.validation_level == TypeValidationLevel.STRICT:
+                    error_msg = f"Type validation failed for {method_name}: {len(input_errors)} errors"
+                    logger.error(error_msg)
+                    raise TypeError(error_msg)
+                
+                # Execute original method
+                result = original_method(*args, **kwargs)
+                
+                # Validate output types
+                output_errors = self._validator.validate_runtime_types(
+                    self._wrapped_component, method_name, args, kwargs, result
+                )
+                
+                if output_errors and self._validator.validation_level == TypeValidationLevel.STRICT:
+                    error_msg = f"Return type validation failed for {method_name}: {len(output_errors)} errors"
+                    logger.error(error_msg)
+                    raise TypeError(error_msg)
+                
+                return result
+        
+        if asyncio.iscoroutinefunction(original_method):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    
+    def get_interface_errors(self) -> List[TypeValidationError]:
+        """Get interface validation errors"""
+        return self._interface_errors.copy()
+    
+    def get_wrapped_component(self):
+        """Get the original wrapped component"""
+        return self._wrapped_component
+
+
+class InterfaceRegistry:
+    """Registry for component interface specifications"""
+    
+    def __init__(self):
+        self.interfaces: Dict[str, InterfaceSpec] = {}
+        self.component_interfaces: Dict[str, str] = {}  # component_name -> interface_name
+    
+    def register_interface(self, interface_spec: InterfaceSpec):
+        """Register a new interface specification"""
+        self.interfaces[interface_spec.name] = interface_spec
+        logger.info(f"Registered interface specification: {interface_spec.name}")
+    
+    def register_component_interface(self, component_name: str, interface_name: str):
+        """Associate a component with an interface"""
+        if interface_name not in self.interfaces:
+            raise ValueError(f"Interface '{interface_name}' not registered")
+        
+        self.component_interfaces[component_name] = interface_name
+        logger.info(f"Associated component '{component_name}' with interface '{interface_name}'")
+    
+    def get_interface(self, interface_name: str) -> Optional[InterfaceSpec]:
+        """Get interface specification by name"""
+        return self.interfaces.get(interface_name)
+    
+    def get_component_interface(self, component_name: str) -> Optional[InterfaceSpec]:
+        """Get interface specification for a component"""
+        interface_name = self.component_interfaces.get(component_name)
+        if interface_name:
+            return self.interfaces.get(interface_name)
+        return None
+    
+    def list_interfaces(self) -> List[str]:
+        """List all registered interface names"""
+        return list(self.interfaces.keys())
+    
+    def list_components(self) -> List[str]:
+        """List all components with registered interfaces"""
+        return list(self.component_interfaces.keys())
+
+
+# Global registry instance
+interface_registry = InterfaceRegistry()
+
+
+def create_type_safe_component(component: Any, interface_name: str, validation_level: TypeValidationLevel = TypeValidationLevel.STRICT) -> TypeSafeComponentWrapper:
+    """Create a type-safe wrapper for a component"""
+    interface_spec = interface_registry.get_interface(interface_name)
+    if not interface_spec:
+        raise ValueError(f"Interface '{interface_name}' not found in registry")
+    
+    validator = TypeSafetyValidator(validation_level)
+    return TypeSafeComponentWrapper(component, interface_spec, validator)
+
+
+def validate_component_types(component: Any, interface_name: str) -> List[TypeValidationError]:
+    """Validate component types against interface specification"""
+    interface_spec = interface_registry.get_interface(interface_name)
+    if not interface_spec:
+        raise ValueError(f"Interface '{interface_name}' not found in registry")
+    
+    validator = TypeSafetyValidator(TypeValidationLevel.STRICT)
+    return validator.validate_component_interface(component, interface_spec)
+
+
+# Built-in interface specifications
+def _register_builtin_interfaces():
+    """Register built-in interface specifications"""
+    
+    # Component base interface
+    component_interface = InterfaceSpec(
+        name="Component",
+        methods={
+            "process": {
+                "parameters": {},
+                "return_type": type(None)
+            },
+            "process_item": {
+                "parameters": {"item": Any},
+                "return_type": Any
+            }
+        },
+        properties={
+            "name": str,
+            "config": dict
+        }
+    )
+    interface_registry.register_interface(component_interface)
+    
+    # Source component interface
+    source_interface = InterfaceSpec(
+        name="Source",
+        methods={
+            "generate_data": {
+                "parameters": {},
+                "return_type": Any
+            }
+        },
+        properties={
+            "output_count": int
+        }
+    )
+    interface_registry.register_interface(source_interface)
+    
+    # Transformer component interface
+    transformer_interface = InterfaceSpec(
+        name="Transformer",
+        methods={
+            "transform": {
+                "parameters": {"data": Any},
+                "return_type": Any
+            }
+        }
+    )
+    interface_registry.register_interface(transformer_interface)
+    
+    # Sink component interface
+    sink_interface = InterfaceSpec(
+        name="Sink",
+        methods={
+            "store_data": {
+                "parameters": {"data": Any},
+                "return_type": type(None)
+            }
+        }
+    )
+    interface_registry.register_interface(sink_interface)
+
+
+# Register built-in interfaces on module import
+_register_builtin_interfaces()

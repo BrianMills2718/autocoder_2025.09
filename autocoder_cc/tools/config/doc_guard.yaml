@@ -1,0 +1,9 @@
+exclude_paths:
+  - "archive/**"
+  - "reports/**"
+  - "generated_systems/**"
+  - "**/*.bak"
+ignore_md_syntax_errors: true
+require_readme_only_at_depth: 2
+status_tag_patterns:
+  - "\\[COMPLETE\\]" 

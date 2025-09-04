@@ -1,0 +1,245 @@
+# Fraud Detection System Deployment Blueprint
+# Environment-specific runtime configuration and deployment settings
+# Companion to fraud_detection_system.yaml (architecture blueprint)
+
+schema_version: "1.0.0"
+system_name: "fraud_detection_system"
+architecture_version: "1.0.0"
+
+# Runtime configuration
+deployment:
+  platform: "docker"
+  target_environment: "development"
+
+  # Container configuration
+  container:
+    base_image: "python:3.11-slim"
+    build:
+      dockerfile: "Dockerfile"
+      context: "."
+
+  # External service instances (runtime specific)
+  external_services:
+    - name: "postgresql"
+      type: "postgresql"
+      connection:
+        host: "localhost"
+        port: 5432
+        username: "fraud_user"
+        password: "fraud_pass"
+        database: "fraud_audit"
+      high_availability:
+        enabled: false
+        backup_enabled: true
+        backup_schedule: "0 2 * * *"  # Daily at 2 AM
+
+    - name: "kafka"
+      type: "kafka"
+      connection:
+        host: "localhost"
+        port: 9092
+      performance:
+        connection_pool_size: 10
+        timeout_seconds: 30
+
+    - name: "redis"
+      type: "redis"
+      connection:
+        host: "localhost"
+        port: 6379
+        database: "0"
+      performance:
+        connection_pool_size: 5
+        timeout_seconds: 10
+
+  # Network configuration (environment-specific)
+  networking:
+    port_mappings:
+      - internal_port: 8082
+        external_port: 8082
+        protocol: "TCP"
+        description: "Webhook receiver port"
+      - internal_port: 8888
+        external_port: 8888
+        protocol: "TCP"
+        description: "Fraud API port"
+      - internal_port: 8889
+        external_port: 8889
+        protocol: "TCP"
+        description: "WebSocket monitoring port"
+      - internal_port: 9093
+        external_port: 9093
+        protocol: "TCP"
+        description: "Metrics collection port"
+
+  # Scaling configuration (environment-specific)
+  scaling:
+    horizontal:
+      enabled: true
+      min_replicas: 1
+      max_replicas: 5
+      target_cpu_utilization: 70
+      target_memory_utilization: 80
+
+# Runtime configuration
+runtime:
+  # Timeouts (environment-specific)
+  timeouts:
+    startup_timeout_ms: 60000
+    shutdown_timeout_ms: 30000
+    health_check_timeout_ms: 5000
+    request_timeout_ms: 30000
+
+  # Resource limits (environment-specific)
+  resource_limits:
+    max_memory_mb: 4096
+    max_cpu_cores: 4
+    max_connections: 1000
+    max_threads: 100
+
+  # Logging configuration (environment-specific)
+  logging:
+    level: "INFO"
+    format: "json"
+    output: "stdout"
+    structured_fields:
+      include_timestamp: true
+      include_level: true
+      include_request_id: true
+
+  # Monitoring configuration (environment-specific)
+  monitoring:
+    metrics:
+      enabled: true
+      provider: "prometheus"
+      scrape_interval_seconds: 30
+    tracing:
+      enabled: true
+      provider: "jaeger"
+      sample_rate: 0.1
+
+  # Error handling configuration (environment-specific)
+  error_handling:
+    default_strategy: "retry"
+    retry:
+      max_attempts: 3
+      initial_delay_ms: 1000
+      max_delay_ms: 30000
+      backoff_multiplier: 2.0
+    circuit_breaker:
+      failure_threshold: 5
+      recovery_timeout_ms: 60000
+
+# Environment configuration
+environment:
+  # Environment variables
+  environment_variables:
+    ENVIRONMENT: "development"
+    LOG_LEVEL: "INFO"
+    KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
+    REDIS_URL: "redis://localhost:6379/0"
+    POSTGRES_URL: "postgresql://fraud_user:fraud_pass@localhost:5432/fraud_audit"
+    ML_MODEL_PATH: "/app/models/fraud_detection_v1.pkl"
+    MONITORING_ENABLED: "true"
+
+  # Feature flags (environment-specific)
+  feature_flags:
+    enable_ml_scoring: true
+    enable_real_time_alerts: true
+    enable_audit_logging: true
+    enable_performance_metrics: true
+    enable_websocket_monitoring: true
+
+  # Database connections (runtime instances)
+  database_connections:
+    - name: "audit_db"
+      type: "postgresql"
+      connection_string: "postgresql://fraud_user:fraud_pass@localhost:5432/fraud_audit"
+      pool_size: 10
+      ssl_required: false
+      timeout_seconds: 30
+
+  # Message queue connections (runtime instances)
+  message_queue_connections:
+    - name: "fraud_events"
+      type: "kafka"
+      brokers: ["localhost:9092"]
+      topics: ["transactions", "fraud_alerts"]
+      consumer_group: "fraud_detection_group"
+      security:
+        protocol: "PLAINTEXT"
+
+# Component-specific runtime overrides
+component_overrides:
+  webhook_receiver:
+    ports:
+      - name: "webhook_port"
+        port: 8082
+        host: "0.0.0.0"
+        protocol: "HTTP"
+    environment_variables:
+      WEBHOOK_PORT: "8082"
+      WEBHOOK_PATH: "/webhook/transaction"
+    resource_overrides:
+      memory_mb: 512
+      cpu_cores: 0.5
+
+  fraud_api:
+    ports:
+      - name: "api_port"
+        port: 8888
+        host: "0.0.0.0"
+        protocol: "HTTP"
+    environment_variables:
+      API_PORT: "8888"
+      API_PREFIX: "/api/v1"
+    resource_overrides:
+      memory_mb: 1024
+      cpu_cores: 1.0
+
+  websocket_server:
+    ports:
+      - name: "websocket_port"
+        port: 8889
+        host: "0.0.0.0"
+        protocol: "WebSocket"
+    environment_variables:
+      WEBSOCKET_PORT: "8889"
+      WEBSOCKET_PATH: "/ws/monitoring"
+    resource_overrides:
+      memory_mb: 256
+      cpu_cores: 0.25
+
+  metrics_collector:
+    ports:
+      - name: "metrics_port"
+        port: 9093
+        host: "0.0.0.0"
+        protocol: "HTTP"
+    environment_variables:
+      METRICS_PORT: "9093"
+      METRICS_PATH: "/metrics"
+    resource_overrides:
+      memory_mb: 128
+      cpu_cores: 0.25
+
+  ml_fraud_scorer:
+    environment_variables:
+      MODEL_PATH: "/app/models/fraud_detection_v1.pkl"
+      MODEL_VERSION: "1.0"
+      INFERENCE_TIMEOUT_MS: "5000"
+    resource_overrides:
+      memory_mb: 2048
+      cpu_cores: 2.0
+
+  kafka_consumer:
+    environment_variables:
+      KAFKA_GROUP_ID: "fraud_detection_consumer"
+      KAFKA_AUTO_OFFSET_RESET: "latest"
+      KAFKA_BATCH_SIZE: "100"
+
+  audit_store:
+    environment_variables:
+      AUDIT_RETENTION_DAYS: "365"
+      BATCH_SIZE: "1000"
+      COMPRESSION_ENABLED: "true"

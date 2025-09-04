@@ -1,0 +1,141 @@
+{
+  "benchmark_contract.py": [
+    {
+      "line": 12,
+      "type": "nested_hardcoded",
+      "content": "'components = blueprint[\"system\"][\"components\"]',"
+    }
+  ],
+  "tests/test_healer_matrix_compliance.py": [
+    {
+      "line": 94,
+      "type": "nested_hardcoded",
+      "content": "components = blueprint[\"system\"][\"components\"]"
+    }
+  ],
+  "archive/tests/test_blueprint_parsing.py": [
+    {
+      "line": 13,
+      "type": "direct_bracket_access",
+      "content": "for component in blueprint['components']:"
+    },
+    {
+      "line": 31,
+      "type": "direct_bracket_access",
+      "content": "for component in blueprint['components']:"
+    }
+  ],
+  "archive/tests/test_recipe_direct.py": [
+    {
+      "line": 71,
+      "type": "direct_bracket_access",
+      "content": "for comp in raw_blueprint['components']:"
+    },
+    {
+      "line": 81,
+      "type": "direct_bracket_access",
+      "content": "for comp in raw_blueprint['components']:"
+    }
+  ],
+  "autocoder_cc/blueprint_language/system_generator.py": [
+    {
+      "line": 500,
+      "type": "direct_bracket_access",
+      "content": "system_blueprint.raw_blueprint['components'][idx] = expanded_spec"
+    }
+  ],
+  "autocoder_cc/security/input_validator.py": [
+    {
+      "line": 458,
+      "type": "direct_bracket_access",
+      "content": "components = blueprint['components']"
+    }
+  ],
+  "autocoder_cc/blueprint_language/architectural_templates/template_selector.py": [
+    {
+      "line": 49,
+      "type": "get_method_flat",
+      "content": "components = blueprint.get(\"components\", [])"
+    }
+  ],
+  "autocoder_cc/tests/integration/test_system_generation_pipeline.py": [
+    {
+      "line": 635,
+      "type": "nested_hardcoded",
+      "content": "large_blueprint[\"system\"][\"components\"].append({"
+    },
+    {
+      "line": 757,
+      "type": "nested_hardcoded",
+      "content": "blueprint[\"system\"][\"components\"].append({"
+    }
+  ],
+  "autocoder_cc/tests/performance/test_generation_performance.py": [
+    {
+      "line": 198,
+      "type": "direct_bracket_access",
+      "content": "blueprint[\"components\"].append({"
+    },
+    {
+      "line": 211,
+      "type": "direct_connections",
+      "content": "blueprint[\"connections\"].append({"
+    }
+  ],
+  "tests/integration/test_generation_pipeline.py": [
+    {
+      "line": 94,
+      "type": "nested_hardcoded",
+      "content": "assert len(blueprint[\"system\"][\"components\"]) == 3"
+    },
+    {
+      "line": 101,
+      "type": "nested_hardcoded",
+      "content": "source = blueprint[\"system\"][\"components\"][0]"
+    },
+    {
+      "line": 347,
+      "type": "nested_hardcoded",
+      "content": "assert len(blueprint[\"system\"][\"components\"]) == 3"
+    },
+    {
+      "line": 354,
+      "type": "nested_hardcoded",
+      "content": "for component in blueprint[\"system\"][\"components\"]:"
+    }
+  ],
+  "tests/contracts/blueprint_structure_contract.py": [
+    {
+      "line": 109,
+      "type": "get_method_flat",
+      "content": "\"components\": blueprint.get(\"components\", []),"
+    },
+    {
+      "line": 110,
+      "type": "get_connections_flat",
+      "content": "\"connections\": blueprint.get(\"connections\", []),"
+    },
+    {
+      "line": 135,
+      "type": "get_method_flat",
+      "content": "return blueprint.get(\"components\", [])"
+    },
+    {
+      "line": 149,
+      "type": "get_connections_flat",
+      "content": "return blueprint.get(\"connections\", blueprint.get(\"bindings\", []))"
+    }
+  ],
+  "tests/validation/test_blueprint_structure_contract.py": [
+    {
+      "line": 241,
+      "type": "nested_hardcoded",
+      "content": "# This is the CONTRACT: components are under blueprint[\"system\"][\"components\"]"
+    },
+    {
+      "line": 242,
+      "type": "direct_bracket_access",
+      "content": "# NOT under blueprint[\"components\"]"
+    }
+  ]
+}

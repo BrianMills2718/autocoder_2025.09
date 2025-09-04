@@ -1,0 +1,147 @@
+CRITICAL STORE COMPONENT REQUIREMENTS - MUST GENERATE WORKING CODE!
+
+THIS IS NOT A STUB OR TEMPLATE - GENERATE FULLY FUNCTIONAL CODE THAT ACTUALLY STORES DATA!
+
+1. CONSTRUCTOR:
+   - def __init__(self, name, config)
+   - Call super().__init__(name, config)
+   - Initialize in-memory storage: self.items = {}
+   - Extract any database configuration from config if needed
+
+2. MAIN PROCESSING METHOD:
+   async def process_item(self, item):
+       """Route actions to appropriate handlers"""
+       action = item.get("action")
+       
+       if action == "add_item":
+           return await self.add_item(item.get("title"), item.get("description"))
+       elif action == "get_item":
+           return await self.get_item(item.get("item_id"))
+       elif action == "update_item":
+           return await self.update_item(item.get("item_id"), item.get("update_data"))
+       elif action == "delete_item":
+           return await self.delete_item(item.get("item_id"))
+       elif action == "list_items":
+           return await self.list_items()
+       else:
+           return {"status": "error", "message": f"Unknown action: {action}"}
+
+3. CRUD METHODS TO IMPLEMENT:
+   
+   async def add_item(self, title: str, description: str) -> Dict[str, Any]:
+       """Add a new item to the store"""
+       import uuid
+       from datetime import datetime
+       
+       item_id = str(uuid.uuid4())
+       item_data = {
+           "id": item_id,
+           "title": title,
+           "description": description,
+           "created_at": datetime.utcnow().isoformat(),
+           "updated_at": datetime.utcnow().isoformat()
+       }
+       self.items[item_id] = item_data
+       
+       return {
+           "status": "success",
+           "message": "Item added successfully",
+           "data": item_data
+       }
+   
+   async def get_item(self, item_id: str) -> Dict[str, Any]:
+       """Get a specific item by ID"""
+       if item_id in self.items:
+           return {
+               "status": "success",
+               "message": "Item retrieved",
+               "data": self.items[item_id]
+           }
+       else:
+           return {
+               "status": "error",
+               "message": f"Item not found: {item_id}"
+           }
+   
+   async def update_item(self, item_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+       """Update an existing item"""
+       from datetime import datetime
+       
+       if item_id not in self.items:
+           return {
+               "status": "error",
+               "message": f"Item not found: {item_id}"
+           }
+       
+       # Update fields from update_data
+       for key, value in update_data.items():
+           if key not in ["id", "created_at"]:  # Don't update these fields
+               self.items[item_id][key] = value
+       
+       self.items[item_id]["updated_at"] = datetime.utcnow().isoformat()
+       
+       return {
+           "status": "success",
+           "message": "Item updated successfully",
+           "data": self.items[item_id]
+       }
+   
+   async def delete_item(self, item_id: str) -> Dict[str, Any]:
+       """Delete an item by ID"""
+       if item_id not in self.items:
+           return {
+               "status": "error",
+               "message": f"Item not found: {item_id}"
+           }
+       
+       deleted_item = self.items.pop(item_id)
+       
+       return {
+           "status": "success",
+           "message": "Item deleted successfully",
+           "data": deleted_item
+       }
+   
+   async def list_items(self) -> Dict[str, Any]:
+       """List all items in the store"""
+       items_list = list(self.items.values())
+       
+       return {
+           "status": "success",
+           "message": f"Retrieved {len(items_list)} items",
+           "data": items_list
+       }
+
+4. REQUIRED HELPER METHODS:
+   async def setup(self):
+       """Initialize resources"""
+       # Initialize any needed resources
+       pass
+   
+   async def cleanup(self):
+       """Clean up resources"""
+       # Clean up any resources
+       pass
+   
+   def get_health_status(self) -> Dict[str, Any]:
+       """Return health status"""
+       return {
+           "healthy": True,
+           "component": self.name,
+           "status": "operational",
+           "items_count": len(self.items)
+       }
+
+5. IMPLEMENTATION NOTES:
+   - Use in-memory storage (dict) for simplicity: self.items = {}
+   - Use uuid.uuid4() for generating unique IDs
+   - Add timestamps using datetime.utcnow().isoformat()
+   - All methods must be async
+   - All methods return Dict[str, Any] with status/message/data structure
+   - Include proper error handling
+   - The process_item method MUST route actions to the appropriate CRUD methods
+   - Do NOT implement database connections unless specifically required by config
+
+CRITICAL: The Store component MUST implement ALL the CRUD methods listed above.
+The process_item method MUST route actions to these methods.
+This is a simple in-memory store, NOT a database-backed store.

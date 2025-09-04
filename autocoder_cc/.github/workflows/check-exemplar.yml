@@ -1,0 +1,47 @@
+name: Validate exemplar system
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify exemplar is the newest generated system
+        run: |
+          set -e
+          if [ ! -d generated_systems ]; then
+            echo "No generated_systems directory; skipping check."
+            exit 0
+          fi
+
+          cd generated_systems
+
+          # Identify newest system_* directory (if any)
+          newest=$(ls -dt system_* 2>/dev/null | head -n 1 || true)
+          if [ -z "$newest" ]; then
+            echo "No system_* directories found – nothing to validate."
+            exit 0
+          fi
+
+          # Exemplar must exist
+          if [ ! -d latest ]; then
+            echo "::error::generated_systems/latest is missing. Run tools/scripts/update_exemplar.sh before committing."
+            exit 1
+          fi
+
+          newest_ts=$(stat -c %Y "$newest")
+          exemplar_ts=$(stat -c %Y latest)
+
+          if [ "$exemplar_ts" -lt "$newest_ts" ]; then
+            echo "::error::generated_systems/latest is older than $newest. Please run tools/scripts/update_exemplar.sh and recommit."
+            exit 1
+          fi
+
+          echo "Exemplar system is up-to-date (latest → $newest)" 

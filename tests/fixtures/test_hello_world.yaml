@@ -1,0 +1,26 @@
+schema_version: "1.0.0"
+system:
+  name: hello_world_api
+  description: Simple Hello World API
+  version: 1.0.0
+  
+  components:
+    - name: hello_world_endpoint
+      type: APIEndpoint
+      description: Simple Hello World API endpoint
+      configuration:
+        port: 8080
+        message: "Hello, World!"
+      outputs:
+        - name: response
+          schema: APIResponse
+  
+  bindings: []  # No bindings for single component
+  
+  policies:
+    security:
+      authentication: false
+      authorization: false
+    data:
+      encryption_at_rest: false
+      encryption_in_transit: false

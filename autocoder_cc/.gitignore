@@ -1,0 +1,117 @@
+# Autocoder Public Repository .gitignore
+# This is for the clean public repository - use when creating the public version
+
+# Development artifacts
+evidence/
+phases/
+production_validation/
+archive/
+multi_agent_template_v2/
+network_visualizations/
+debug_files/
+claude_md_archive/
+reports/
+
+# Generated outputs
+generated_systems/*
+!generated_systems/latest/
+test_output/
+working_task_api/
+components/geoip_enrichment_system/
+
+# Local development files
+CLAUDE.md
+IMPLEMENTATION_STATUS.md
+edits.md
+problems.md
+*_test.py
+test_*.py
+debug_*.py
+investigate_*.py
+analyze_*.py
+create_*.py
+visualize_*.py
+simple_*.py
+end_to_end_*.py
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+generation_verbose.json
+generation_verbose.log
+production_validation_results.json
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+secrets/
+local_config/
+*.key
+*.pem
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Testing artifacts
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# Documentation artifacts
+docs/*.log
+docs/phase_*.md
+docs/phase_progress.json
+docs/repository_structure_analysis.md
+docs/REPOSITORY_CLEANUP_PLAN.md
+docs/*_archive/
+# documentation review artifacts
+docs/*_doc_review.md
+docs/*-doc-review.md
+
+# Images and visualizations
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+image.png
+
+# Tools directory (development tools)
+# tools directory is tracked in repo
+
+# Temporary generated example (if not including)
+# examples/generated_system_example/
+# examples/test_working_system/
+# examples/generated_system_example/README.md
+
+# But DO include these (use ! to negate ignore):
+!docs/ENTERPRISE_ROADMAP.md
+!docs/V5.3_architecture_spec.md
+!docs/current_phase_status.md
+!docs/MULTI_AGENT_SYSTEM_GUIDE.md
+!docs/well_specified_nl_request.md

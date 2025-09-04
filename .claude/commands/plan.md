@@ -1,0 +1,1 @@
+ultrathink to methodically and comprehensively plan how to resolve these issues but dont implement the fixes yet.

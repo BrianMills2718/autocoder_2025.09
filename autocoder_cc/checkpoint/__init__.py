@@ -1,0 +1,1 @@
+"""Checkpoint management for saving and restoring component state."""

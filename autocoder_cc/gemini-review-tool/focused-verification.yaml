@@ -1,0 +1,138 @@
+# Focused Gemini Review Configuration for Critical Issues Resolution Validation
+# This configuration validates specific claims about fixing the critical issues identified by Gemini
+
+project_name: "AutoCoder4_CC Critical Issues Resolution Verification (Focused)"
+project_path: "."
+output_format: "xml"
+output_file: "gemini-critical-fixes-verification-focused.md"
+keep_repomix: false
+
+# Very focused ignore patterns - only include CORE files for validation
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "gemini-review*.md"
+  - "repomix-output.*"
+  - "coverage_html"
+  - "test_generation"
+  - "output"
+  - "chaos_evidence_comprehensive_production_test_*"
+  - "tests/"
+  - "docs/"
+  - "reports/"
+  - "security/"
+  - "autocoder/"
+  - "blueprint_language/examples/"
+  - "blueprint_language/templates/"
+  - "blueprint_language/validators/"
+  - "blueprint_language/intermediate_system_healer.py"
+  - "blueprint_language/level3_integration_validator.py"
+  - "blueprint_language/level3_real_integration_validator.py"
+  - "blueprint_language/system_blueprint_parser.py"
+  - "blueprint_language/system_scaffold_generator.py"
+  - "blueprint_language/component_logic_generator.py"
+  - "blueprint_language/natural_language_to_blueprint.py"
+  - "blueprint_language/validation_framework.py"
+  - "blueprint_language/verbose_logger.py"
+  - "tools/"
+  - "requirements.txt"
+  - "setup.py"
+  - "*.md"
+  - "generated_systems/system_20250716_*"
+  - "generated_systems/system_20250717_144115"
+  - "generated_systems/components/"
+
+# Only the most critical files demonstrating the fixes
+documentation_files:
+  - "./generate_deployed_system.py"
+  - "./blueprint_language/llm_component_generator.py" 
+  - "./blueprint_language/production_deployment_generator.py"
+
+# Streamlined claims focused on the core fixes
+claims_of_success: |
+  CRITICAL ISSUES RESOLUTION VERIFICATION (FOCUSED):
+  
+  Three critical issues were identified by Gemini validation of AutoCoder4_CC system:
+  1. Component configuration errors preventing actual operation
+  2. Superficial success validation contradicted by internal validation failure  
+  3. Non-production-ready infrastructure missing security and scalability
+  
+  ## CLAIM 1: Component Configuration Errors Fixed
+  
+  **Docker Networking Configuration Fixed:**
+  EVIDENCE: Modified blueprint_language/llm_component_generator.py with Docker networking requirements
+  SPECIFIC_CHANGES:
+  - Lines 1367-1423: Added "CRITICAL DOCKER NETWORKING CONFIGURATION" to Source components
+  - Lines 1523-1601: Added Docker database networking for Store components  
+  - Lines 1628-1693: Added Docker networking for API endpoints
+  - Changed from localhost to Docker service names (postgres, redis, kafka, rabbitmq)
+  
+  ## CLAIM 2: Superficial Validation Replaced with Comprehensive Testing
+  
+  **Comprehensive Functional Testing Implemented:**
+  EVIDENCE: Completely replaced deploy_and_test_system() in generate_deployed_system.py
+  SPECIFIC_CHANGES:
+  - Lines 338-518: Replaced /health checks with 5 comprehensive test categories
+  - Lines 438-478: Added real database functionality testing
+  - Lines 489-518: Added honest validation results to phase4_validation_results.json
+  - Lines 554-571: Updated success reporting to show comprehensive validation results
+  
+  ## CLAIM 3: Production-Ready Infrastructure Added
+  
+  **Production Security and Docker Service Configuration:**
+  EVIDENCE: Enhanced production_deployment_generator.py with security and networking fixes
+  SPECIFIC_CHANGES:
+  - Lines 698-779: Added production security (container hardening, capabilities)
+  - Lines 782-836: Fixed Docker service names (postgres, redis, kafka, rabbitmq)
+  - Lines 708-743: Added comprehensive environment variables with Docker service names
+  
+  ## VERIFICATION REQUIREMENTS
+  
+  Verify that:
+  1. LLM prompts enforce Docker service names instead of localhost
+  2. Validation tests actual functionality beyond health checks
+  3. Docker configurations include production security features
+  4. Service dependencies use consistent naming
+
+# Streamlined validation prompt
+custom_prompt: |
+  CRITICAL VALIDATION: Verify fixes to three fundamental issues in AutoCoder4_CC.
+
+  CONTEXT: Previous assessment identified system as "sophisticated demo" due to:
+  1. Component configuration errors (localhost instead of Docker service names)
+  2. Superficial validation (health checks vs. real functionality testing)
+  3. Non-production infrastructure (missing security and scalability)
+
+  VALIDATION FOCUS:
+  
+  **Configuration Fixes Analysis:**
+  - Do LLM prompts in llm_component_generator.py enforce Docker service names?
+  - Are database connections configured for postgres, redis, kafka services?
+  - Is localhost usage explicitly prevented?
+  
+  **Validation Fixes Analysis:**  
+  - Does generate_deployed_system.py test real functionality beyond /health?
+  - Are database operations tested with actual SQL?
+  - Does validation align with system capabilities?
+  
+  **Infrastructure Fixes Analysis:**
+  - Does production_deployment_generator.py include security hardening?
+  - Are Docker service names consistent across environment variables?
+  - Is infrastructure production-ready?
+
+  RATING CRITERIA (1-10):
+  - **Configuration Correctness**: Do fixes address Docker networking issues?
+  - **Validation Accuracy**: Does testing assess real functionality? 
+  - **Infrastructure Readiness**: Are production features present?
+  - **Overall Effectiveness**: Do fixes transform "demo" to "working system"?
+
+  Focus on whether these specific changes actually resolve the identified critical issues.

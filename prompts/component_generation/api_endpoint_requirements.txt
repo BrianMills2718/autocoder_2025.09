@@ -1,0 +1,49 @@
+API ENDPOINT SPECIFIC REQUIREMENTS (FastAPI):
+
+INITIALIZATION:
+- Constructor signature: def __init__(self, name: str, config: Dict[str, Any] = None):
+- Call parent constructor: super().__init__(name, config)
+- CRITICAL: NEVER call anyio.run() or asyncio.run() in __init__ method
+- Initialize port and host variables in __init__
+- Use allocated port from config.get('port') as primary choice, fallback to 8080 if not available
+
+DOCKER NETWORKING CONFIGURATION:
+- Listen on 0.0.0.0 to accept connections from other Docker containers
+- API endpoints should be accessible via Docker service name
+- Database connections must use Docker service names (postgres, mysql, etc.)
+- External service calls must use Docker service names when applicable
+
+IMPLEMENTATION PATTERN:
+- CONFIGURATION: Extract host/port from config, use Docker-compatible defaults
+- INITIALIZATION: Set up component state but avoid blocking operations in __init__
+- REQUEST PROCESSING: Handle HTTP requests via process_item() method
+- RESPONSE FORMAT: Return structured responses with status, data, timestamp
+- ERROR HANDLING: Catch exceptions and return error responses
+- OBSERVABILITY: Log requests and update metrics for processed items
+
+HTTP REQUEST HANDLING:
+- Implement async def process_item(self, item: Any) -> Any method for handling HTTP requests
+- The process_item method should handle HTTP request processing
+- Return structured JSON responses with consistent format
+- Handle different HTTP methods (GET, POST, PUT, DELETE) appropriately
+- Validate input data and sanitize outputs
+
+RESPONSE FORMAT:
+{
+    "status": "success" | "error",
+    "data": <response_data>,
+    "timestamp": <iso_timestamp>,
+    "request_id": <correlation_id>
+}
+
+ERROR RESPONSES:
+{
+    "status": "error",
+    "error": {
+        "code": <error_code>,
+        "message": <user_friendly_message>,
+        "details": <technical_details>
+    },
+    "timestamp": <iso_timestamp>,
+    "request_id": <correlation_id>
+}

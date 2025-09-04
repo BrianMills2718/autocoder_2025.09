@@ -1,0 +1,97 @@
+project_name: "AutoCoder4_CC Component Implementation - Phase 1 Validation"
+project_path: "/home/brian/projects/autocoder4_cc"
+
+include_patterns:
+  - "evidence/current/Evidence_Component_Implementation_2025-08-02.md"
+  - "tests/unit/core/test_api_reference.py"
+  - "tests/unit/core/test_store_reference.py"
+  - "autocoder_cc/components/"
+  - "CLAUDE.md"
+
+claims_of_success:
+  - claim: "TaskAPI Component Implementation Completed"
+    description: "FastAPI integration, endpoint definitions, proper attribute initialization"
+    expected_evidence:
+      - "FastAPI app properly initialized in setup() method"
+      - "API routes accessible via app.routes"
+      - "Health and task management endpoints functional"
+      - "18/18 TaskAPI tests pass with raw test logs"
+      - "Complete REST API with /health, /tasks, /tasks/{id} endpoints"
+      - "Proper store component binding and error handling"
+      - "Component lifecycle management with running attribute"
+
+  - claim: "TaskStore Component Implementation Completed"
+    description: "CRUD operations, ID generation, proper return value contracts"
+    expected_evidence:
+      - "Task storage and retrieval operations functional"
+      - "Proper ID generation and task counting"
+      - "Method return values match test expectations"
+      - "Error handling for not_found cases implemented"
+      - "13/13 TaskStore tests pass with raw test logs"
+      - "Complete CRUD operations: create, read, update, delete, list"
+      - "Sequential ID generation starting from 1"
+      - "Proper response format with status/data/error fields"
+
+  - claim: "Component Lifecycle Management Implemented"
+    description: "Running attribute and proper start/stop state management added"
+    expected_evidence:
+      - "Both components have running attribute"
+      - "setup() method sets running=True"
+      - "cleanup() method sets running=False"
+      - "Health status reports include lifecycle state"
+      - "Lifecycle tests pass for both API and Store components"
+
+  - claim: "Phase 1 Success Criteria Achieved"
+    description: "All Phase 1 completion gates from CLAUDE.md met or exceeded"
+    expected_evidence:
+      - "TaskAPI tests passing: 100% (exceeds 75% requirement)"
+      - "TaskStore tests passing: 100% (exceeds 75% requirement)"
+      - "Actual functionality demonstrated (real FastAPI, real CRUD)"
+      - "Raw execution logs documented in evidence file"
+      - "31/31 component tests passing (100% pass rate)"
+
+validation_scope: "component_implementation_phase1"
+validation_focus: "functional_implementation_verification"
+validation_criteria: "production_ready_implementation"
+
+verification_commands:
+  - command: "pytest tests/unit/core/test_api_reference.py::TestAPIComponentPattern::test_api_endpoints_defined -v"
+    expected_result: "PASSED - FastAPI routes properly defined"
+  
+  - command: "pytest tests/unit/core/test_store_reference.py::TestStoreComponentPattern::test_store_crud_operations -v"
+    expected_result: "PASSED - CRUD operations functional"
+  
+  - command: "pytest tests/unit/core/test_api_reference.py tests/unit/core/test_store_reference.py -v --tb=short"
+    expected_result: "31 tests passed, 0 failed"
+  
+  - command: "python3 -c \"from tests.unit.core.test_api_reference import TaskAPI; api = TaskAPI('test', {'port': 8000}); print(f'FastAPI app created: {api.app is not None}'); print(f'Routes: {[r.path for r in api.app.routes if hasattr(r, \"path\")]}')\""
+    expected_result: "FastAPI app creation and route listing succeeds"
+
+success_criteria:
+  - "All TaskAPI implementation requirements fulfilled"
+  - "All TaskStore implementation requirements fulfilled" 
+  - "Component lifecycle management working"
+  - "100% test pass rate on implemented components"
+  - "Real production functionality (no stubs/mocks)"
+  - "Evidence documentation complete and accurate"
+
+failure_indicators:
+  - "Any component tests failing"
+  - "Stub/mock implementations instead of real functionality"
+  - "Missing lifecycle management"
+  - "Incomplete CRUD operations"
+  - "Missing FastAPI integration"
+  - "Inflated claims not supported by test evidence"
+
+notes: |
+  This validation verifies the successful completion of Phase 1 component implementation
+  work as specified in CLAUDE.md. The focus is on confirming that TaskAPI and TaskStore
+  components have been implemented with full production functionality, including:
+  
+  - Complete FastAPI integration with real endpoints
+  - Full CRUD operations with proper ID generation
+  - Component lifecycle management
+  - Comprehensive test coverage with 100% pass rate
+  
+  This represents a significant milestone in the AutoCoder4_CC development, moving from
+  infrastructure setup to functional component implementation.

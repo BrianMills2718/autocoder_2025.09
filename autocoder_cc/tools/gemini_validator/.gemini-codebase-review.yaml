@@ -1,0 +1,120 @@
+# Gemini Codebase Review Configuration
+# For comprehensive analysis of autocoder4_cc using Gemini's 1M token context
+
+project_name: "Autocoder V5.2 - Enterprise System Generation Platform"
+project_path: "."
+
+# Output settings
+output_format: "xml"
+output_file: "reports/gemini-codebase-review.md"
+keep_repomix: false
+
+# Comprehensive ignore patterns
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "generated_systems"
+  - "reports"
+  - "gemini-review*.md"
+  - "repomix-output.*"
+  - "*.json"
+  - "*.lock"
+  - "*.toml"
+
+# Key documentation files
+documentation_files:
+  - "./CLAUDE.md"
+  - "./README.md"
+  - "./autocoder_cc/docs/Enterprise_roadmap_v2.md"
+  - "./autocoder_cc/docs/cursor_notes_2025.07121340.md"
+
+# Validation claims to evaluate against
+claims_of_success: |
+  Previous claims made about this codebase:
+  
+  1. "Phase 0 foundation is mostly complete"
+  2. "Centralized configuration with Pydantic Settings is implemented"
+  3. "AST-based code analysis is working"
+  4. "Plugin-based generator structure is in place"
+  5. "Modern component architecture with anyio streams is functional"
+  6. "Blueprint-driven design with validation-driven framework is operational"
+  7. "ComposedComponent model with capabilities system is implemented"
+  8. "SystemExecutionHarness with structured concurrency is working"
+  9. "Enterprise-grade observability stack is integrated"
+  10. "Schema versioning system is functional"
+  
+  Please evaluate these claims against the actual implementation and identify:
+  - Which claims are accurate and well-supported by the code
+  - Which claims are partially implemented or have gaps
+  - Which claims are not supported by the current codebase
+  - Critical architectural issues or technical debt
+  - Missing components needed for enterprise deployment
+
+# Custom comprehensive review prompt
+custom_prompt: |
+  This is a comprehensive codebase review for Autocoder V5.2, an enterprise system generation platform. 
+  
+  Focus on:
+  
+  1. **Architecture Assessment**: 
+     - Evaluate the blueprint-driven design and component composition model
+     - Assess the validation-driven framework and "fail-hard" principles
+     - Review the SystemExecutionHarness and structured concurrency implementation
+     - Analyze the observability and schema versioning systems
+  
+  2. **Component System Analysis**:
+     - Review the ComposedComponent base class and capabilities system
+     - Evaluate component types (Source, Store, APIEndpoint, etc.) and their implementations
+     - Assess the component registry and validation mechanisms
+     - Check for consistency in component interfaces and patterns
+  
+  3. **Blueprint System Review**:
+     - Analyze the blueprint parsing, validation, and generation pipeline
+     - Review the intermediate format and system healing mechanisms
+     - Evaluate the natural language to blueprint translation
+     - Check schema versioning and migration capabilities
+  
+  4. **Technical Debt & Issues**:
+     - Identify attribute naming inconsistencies (config vs configuration)
+     - Find missing component types or incomplete implementations
+     - Locate error handling gaps or validation issues
+     - Spot performance bottlenecks or architectural problems
+  
+  5. **Enterprise Readiness**:
+     - Assess production deployment capabilities
+     - Review security, monitoring, and reliability features
+     - Evaluate scalability and maintainability aspects
+     - Check compliance with enterprise standards
+  
+  6. **Code Quality**:
+     - Review error handling and logging consistency
+     - Assess test coverage and validation completeness
+     - Check for code duplication and refactoring opportunities
+     - Evaluate documentation quality and completeness
+  
+  Provide specific, actionable recommendations for improvements, especially focusing on:
+  - Critical bugs that need immediate attention
+  - Architectural improvements for enterprise deployment
+  - Missing components or incomplete implementations
+  - Code quality and maintainability enhancements
+
+# Review template for comprehensive analysis
+review_templates:
+  enterprise_comprehensive:
+    prompt: "Comprehensive enterprise codebase review focusing on architecture, technical debt, and production readiness"
+    focus: 
+      - "architecture"
+      - "scalability" 
+      - "security"
+      - "maintainability"
+      - "technical_debt"
+      - "production_readiness"

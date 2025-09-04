@@ -1,0 +1,134 @@
+# Minimal Gemini Verification Review Configuration
+# Focused on key implementation files only
+
+project_name: "AutoCoder4_CC Critical Implementation Verification"
+project_path: "."
+output_format: "xml"
+output_file: "gemini-minimal-verification.md"
+keep_repomix: false
+
+# Aggressive ignore patterns - only include essential implementation files
+ignore_patterns:
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".venv"
+  - "venv"
+  - "node_modules"
+  - "*.log"
+  - ".pytest_cache"
+  - "*.egg-info"
+  - "build"
+  - "dist"
+  - "gemini-review*.md"
+  - "repomix-output.*"
+  - "coverage_html"
+  - "generated_systems"
+  - "test_generation"
+  - "output"
+  - "chaos_evidence_comprehensive_production_test_*"
+  - "tests/"
+  - "autocoder/generators/"
+  - "blueprint_language/examples"
+  - "blueprint_language/templates"
+  - "blueprint_language/validators"
+  - "docs/"
+  - "reports/"
+  - "security/"
+  - "autocoder/analysis/"
+  - "autocoder/capabilities/"
+  - "autocoder/cli/"
+  - "autocoder/components/"
+  - "autocoder/core/"
+  - "autocoder/error_handling/"
+  - "autocoder/generation/"
+  - "autocoder/healing/"
+  - "autocoder/ir/"
+  - "autocoder/messaging/"
+  - "autocoder/observability/"
+  - "autocoder/orchestration/"
+  - "autocoder/production/"
+  - "autocoder/security/"
+  - "autocoder/testing/"
+  - "autocoder/utils/"
+  - "autocoder/validation/"
+
+# Only include key evidence and validation files
+documentation_files:
+  - "./Evidence.md"
+
+# Focused claims for validation
+claims_of_success: |
+  CRITICAL IMPLEMENTATION VERIFICATION CLAIMS:
+  
+  ## PRIMARY CLAIMS TO VALIDATE:
+  
+  1. **Evidence Documentation Quality**
+     CLAIM: "Comprehensive Evidence.md contains independently verifiable results"
+     VERIFY: Evidence.md exists and contains actual execution results with timestamps
+     
+  2. **Production Validation Framework**
+     CLAIM: "tools/production_validation.py validates 6 critical components"
+     VERIFY: File exists, contains ProductionValidationFramework class, validates actual components
+     
+  3. **Independent Verification Framework**
+     CLAIM: "tools/independent_verification.py provides external validation"
+     VERIFY: File exists, contains IndependentVerificationFramework class, actual external validation
+     
+  4. **Exception Audit Implementation**
+     CLAIM: "tools/exception_audit_tool.py provides AST semantic analysis"
+     VERIFY: File exists, contains SemanticExceptionAnalyzer class, actual AST analysis
+     
+  5. **Test Coverage Analysis**
+     CLAIM: "tools/test_coverage_analysis.py provides comprehensive coverage analysis"
+     VERIFY: File exists, contains TestCoverageAnalyzer class, actual coverage tools
+     
+  6. **Dynamic Benchmark Collection**
+     CLAIM: "blueprint_language/system_generator.py eliminates hardcoded values"
+     VERIFY: File contains LiveIndustryBenchmarkCollector with real API calls, no hardcoded fallbacks
+  
+  ## VALIDATION REQUIREMENTS:
+  
+  - Each claimed file must EXIST and contain the described implementation
+  - No placeholder code, stubs, or NotImplementedError
+  - Actual working implementations, not just function signatures
+  - Evidence must be verifiable and contain real execution results
+  - Performance claims must be backed by actual measurements
+  - Security fixes must address root issues, not just symptoms
+  
+  ## CRITICAL QUESTIONS:
+  
+  1. Does Evidence.md contain actual execution results or just claims?
+  2. Do the validation frameworks actually test what they claim to test?
+  3. Are the benchmark calculations truly dynamic or disguised hardcoded values?
+  4. Are there any remaining NotImplementedError or placeholder patterns?
+  5. Do the frameworks provide production-ready functionality?
+
+# Custom validation prompt
+custom_prompt: |
+  You are conducting a CRITICAL VALIDATION of implementation claims for AutoCoder4_CC.
+  
+  Your task is to verify if the claimed implementations actually exist and work as described.
+  
+  FOCUS ON:
+  1. **File Existence**: Do the claimed files actually exist?
+  2. **Implementation Quality**: Are they complete implementations or stubs?
+  3. **Evidence Verification**: Does Evidence.md contain real results or just claims?
+  4. **Production Readiness**: Are implementations production-ready or prototypes?
+  
+  For each claim, provide:
+  - **EXISTS**: Yes/No - Does the file exist?
+  - **COMPLETE**: Yes/No - Is the implementation complete?
+  - **VERIFIED**: Yes/No - Can the evidence be verified?
+  - **PRODUCTION**: Yes/No - Is it production-ready?
+  
+  Be extremely critical. Look for:
+  - Files that don't exist
+  - Stub implementations
+  - Placeholder code
+  - Hardcoded values disguised as dynamic
+  - Evidence that can't be reproduced
+  - Claims that don't match the actual code
+  
+  Rate overall implementation completeness: 1-10 scale.
+  Provide specific examples of issues found.

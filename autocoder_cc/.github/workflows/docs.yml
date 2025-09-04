@@ -1,0 +1,40 @@
+name: Docs Guardrails
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  doc_matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Install mermaid CLI
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Generate capability table (check mode)
+        run: python scripts/gen_cap_table.py --check
+
+      - name: Roadmap checkbox linter
+        run: python scripts/roadmap_lint.py
+
+      - name: Mermaid diagram syntax check
+        run: bash scripts/check_mermaid.sh
+
+      - name: Insert commit badge
+        run: python scripts/gen_commit_badge.py
+
+      - name: Validate heading matrix
+        run: python scripts/doc_matrix.py 

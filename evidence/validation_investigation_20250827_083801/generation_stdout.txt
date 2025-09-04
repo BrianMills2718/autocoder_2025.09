@@ -1,0 +1,269 @@
+Generating system: Validation Test System
+Output directory: /tmp/tmpcv_9bqo7
+🤖 Translating natural language to blueprint...
+   Fixed component type: 'Source' → 'Source'
+   Fixed component type: 'Transformer' → 'Transformer'
+   Fixed component type: 'Store' → 'Store'
+✅ Generated blueprint YAML
+📝 Blueprint preview (first 200 chars):
+schema_version: "1.0.0"
+
+system:
+  name: validation_test_system
+  description: A simple system designed to demonstrate compliance with all architectural and binding rules, including a source,
+    a tr...
+
+🔧 Generating system components...
+08:38:16 - INFO - 🚀 AUTOCODER VERBOSE GENERATION SESSION STARTED
+08:38:16 - INFO - Session ID: autocoder_1756309096
+08:38:16 - INFO - Log file: /tmp/tmpcv_9bqo7/generation_verbose.log
+08:38:16 - INFO - Structured log: /tmp/tmpcv_9bqo7/generation_verbose.json
+✅ Centralized prompts loaded successfully - no contradictions found
+✅ Centralized prompts loaded successfully - no contradictions found
+✅ Centralized prompts loaded successfully - no contradictions found
+08:38:16 - INFO - ▶️  Generate System: validation_test_system
+08:38:16 - INFO - 🚀 Generating system: validation_test_system
+08:38:16 - INFO - 📋 Blueprint details:
+08:38:16 - INFO -    - Components: 3
+08:38:16 - INFO -    - Bindings: 4
+08:38:16 - INFO -    - Version: 1.0.0
+08:38:16 - INFO -   ▶️  Pre-Generation Validation
+08:38:16 - INFO -     ✅ pre_generation: PASSED
+08:38:16 - ERROR -        🚨 Errors (0):
+08:38:16 - INFO -   ✅ Pre-Generation Validation (⏱️ 0.00s)
+08:38:16 - INFO -   ▶️  Allocate System Ports
+08:38:16 - INFO - ✅ Allocated 0 ports successfully
+08:38:16 - INFO -   ✅ Allocate System Ports (⏱️ 0.00s)
+08:38:16 - INFO -   ▶️  Generate System Scaffold
+08:38:16 - INFO -     📄 Generated: main.py
+08:38:16 - INFO -        📏 Size: 10336 chars, 263 lines
+08:38:16 - INFO -     📄 Generated: config/system_config.yaml
+08:38:16 - INFO -        📏 Size: 1168 chars, 56 lines
+08:38:16 - INFO -     📄 Generated: requirements.txt
+08:38:16 - INFO -        📏 Size: 226 chars, 11 lines
+08:38:16 - INFO -     📄 Generated: Dockerfile
+08:38:16 - INFO -        📏 Size: 929 chars, 34 lines
+08:38:16 - INFO -   ✅ Generate System Scaffold (⏱️ 0.01s)
+08:38:16 - INFO -   ▶️  Generate Database Schema Artifacts
+08:38:16 - INFO - ✅ Generated 2 schema artifacts
+08:38:16 - INFO -     📄 Generated: database/schema_v1_0_0.sql
+08:38:16 - INFO -        📏 Size: 616 chars, 18 lines
+08:38:16 - INFO -     📄 Generated: database/migration_metadata.json
+08:38:16 - INFO -        📏 Size: 163 chars, 7 lines
+08:38:16 - INFO -   ✅ Generate Database Schema Artifacts (⏱️ 0.00s)
+08:38:16 - INFO -   ▶️  Generate Service Communication Configuration
+08:38:25 - INFO - ✅ Generated service communication configuration
+08:38:25 - INFO -     📄 Generated: config/messaging_config.yaml
+08:38:25 - INFO -        📏 Size: 2845 chars, 100 lines
+08:38:25 - INFO -   ✅ Generate Service Communication Configuration (⏱️ 9.39s)
+08:38:25 - INFO -   ▶️  Generate Shared Observability Module
+08:38:25 - INFO -     📄 Generated: observability.py
+08:38:25 - INFO -        📏 Size: 14302 chars, 372 lines
+08:38:25 - INFO - ✅ Generated shared observability module: /tmp/tmpcv_9bqo7/scaffolds/validation_test_system/components/observability.py
+08:38:25 - INFO - 📏 Observability module: 14302 chars, 372 lines
+08:38:25 - INFO -   ✅ Generate Shared Observability Module (⏱️ 0.00s)
+08:38:25 - INFO -   ▶️  Generate Communication Framework
+08:38:25 - INFO -     📄 Generated: communication.py
+08:38:25 - INFO -        📏 Size: 14665 chars, 386 lines
+08:38:25 - INFO - ✅ Generated communication framework: /tmp/tmpcv_9bqo7/scaffolds/validation_test_system/components/communication.py
+08:38:25 - INFO - 📏 Communication module: 14665 chars, 386 lines
+08:38:25 - INFO - 🔗 Configured 4 component bindings for runtime routing
+08:38:25 - INFO -   ✅ Generate Communication Framework (⏱️ 0.00s)
+08:38:25 - INFO -   ▶️  Generate Component Implementations with Self-Healing
+LLM call attempt 1/6
+Debug: Raw generated code starts with: 'class GeneratedSource_data_generator(ComposedCompo'
+
+--- Generated code preview for data_generator ---
+Total length: 4127 chars
+1: class GeneratedSource_data_generator(ComposedComponent):
+2:     def __init__(self, name: str, config: Dict[str, Any] = None):
+3:         super().__init__(name, config)
+4:         self.logger.info(f"Initializing DataGenerator component: {name}")
+5: <empty line>
+6:         # Configuration for data generation
+7:         self._num_items_to_generate = int(self.config.get("num_items_to_generate", 1))
+8:         self._data_prefix = self.config.get("data_prefix", "record_")
+9:         self._start_id = int(self.config.get("start_id", 0))
+10: <empty line>
+11:         self._current_record_id = self._start_id
+12:         self.logger.info(f"DataGenerator configured: num_items_to_generate={self._num_items_to_generate}, data_prefix='{self._data_prefix}', start_id={self._start_id}")
+13: <empty line>
+14:     async def process_item(self, item: Any) -> Any:
+15:         span = self.tracer.start_span(f"{self.name}.process_item")
+... (64 more lines)
+--- End preview ---
+
+Warning: LLM generated boilerplate. Extracting component class...
+Extracted component class starting at line 0
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate ENTRY ===
+Component: data_generator, Type: Source
+Input has class definition: True
+Input __init__ count: 1
+First 200 chars: class GeneratedSource_data_generator(ComposedComponent):
+    def __init__(self, name: str, config: Dict[str, Any] = None):
+        super().__init__(name, config)
+        self.logger.info(f"Initializin
+✅ Centralized prompts loaded successfully - no contradictions found
+
+=== DIAGNOSTIC: After _inject_lifecycle_methods ===
+Has class definition: True
+__init__ count: 1
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate EXIT ===
+Final has class: True
+Final __init__ count: 1
+✅ Found component class 'GeneratedSource_data_generator' with substantial process_item implementation
+✅ LLM generation successful with gemini_2_5_flash after 1 attempt(s)
+Debug: Saved generated code to /tmp/debug_data_generator.py
+LLM call attempt 1/6
+Debug: Raw generated code starts with: 'class GeneratedTransformer_data_processor(Composed'
+
+--- Generated code preview for data_processor ---
+Total length: 1387 chars
+1: class GeneratedTransformer_data_processor(ComposedComponent):
+2:     def __init__(self, name: str, config: dict = None):
+3:         super().__init__(name, config)
+4:         self.transformation_rule = config.get("transformation_rule", "default_rule")
+5: <empty line>
+6:     async def process_item(self, item: Any) -> Any:
+7:         try:
+8:             self.logger.info(f"Processing item: {item}")
+9:             transformed_item = self.apply_transformation(item)
+10:             self.metrics_collector.counter("items_processed", 1)
+11:             response = await self.send_to_component("next_component", transformed_item)
+12:             if response.get("status") == "error":
+13:                 self.handle_error(Exception(response["message"]), "Failed to send transformed item")
+14:                 return {"status": "error", "message": "Failed to process item"}
+15:             return response.get("result")
+... (10 more lines)
+--- End preview ---
+
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate ENTRY ===
+Component: data_processor, Type: Transformer
+Input has class definition: True
+Input __init__ count: 1
+First 200 chars: class GeneratedTransformer_data_processor(ComposedComponent):
+    def __init__(self, name: str, config: dict = None):
+        super().__init__(name, config)
+        self.transformation_rule = config.g
+✅ Centralized prompts loaded successfully - no contradictions found
+
+=== DIAGNOSTIC: After _inject_lifecycle_methods ===
+Has class definition: True
+__init__ count: 1
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate EXIT ===
+Final has class: True
+Final __init__ count: 1
+✅ Found component class 'GeneratedTransformer_data_processor' with substantial process_item implementation
+✅ LLM generation successful with openai_gpt4o_mini after 1 attempt(s)
+Debug: Saved generated code to /tmp/debug_data_processor.py
+✅ Loaded detailed Store requirements from /home/brian/projects/autocoder4_cc/prompts/component_generation/store_requirements.txt
+LLM call attempt 1/6
+Debug: Raw generated code starts with: 'class GeneratedStore_Datapersister(ComposedCompone'
+
+--- Generated code preview for data_persister ---
+Total length: 5956 chars
+1: class GeneratedStore_Datapersister(ComposedComponent):
+2:     def __init__(self, name, config):
+3:         super().__init__(name, config)
+4:         self.items = {}
+5:         self.storage_type = config.get("storage_type", "in-memory")
+6:         self.logger.info(f"Datapersister component initialized with storage type: {self.storage_type}")
+7: <empty line>
+8:     async def process_item(self, item):
+9:         """Route actions to appropriate handlers for data persistence."""
+10:         action = item.get("action")
+11: <empty line>
+12:         try:
+13:             if action == "add_item":
+14:                 title = item.get("title")
+15:                 description = item.get("description")
+... (124 more lines)
+--- End preview ---
+
+Warning: LLM generated boilerplate. Extracting component class...
+Extracted component class starting at line 0
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate ENTRY ===
+Component: data_persister, Type: Store
+Input has class definition: True
+Input __init__ count: 1
+First 200 chars: class GeneratedStore_Datapersister(ComposedComponent):
+    def __init__(self, name, config):
+        super().__init__(name, config)
+        self.items = {}
+        self.storage_type = config.get("stor
+✅ Centralized prompts loaded successfully - no contradictions found
+
+=== DIAGNOSTIC: After _inject_lifecycle_methods ===
+Has class definition: True
+__init__ count: 1
+
+=== DIAGNOSTIC: wrap_component_with_boilerplate EXIT ===
+Final has class: True
+Final __init__ count: 1
+✅ Found component class 'GeneratedStore_Datapersister' with substantial process_item implementation
+✅ LLM generation successful with gemini_2_5_flash after 1 attempt(s)
+Debug: Saved generated code to /tmp/debug_data_persister.py
+08:39:43 - INFO - ✅ Generated 5 component files with healing applied
+08:39:43 - INFO -     🔧 Generating component: data_persister (Store)
+08:39:43 - INFO -     🔧 Generating component: data_generator (Source)
+08:39:43 - INFO -     🔧 Generating component: data_processor (Transformer)
+08:39:43 - INFO -   ✅ Generate Component Implementations with Self-Healing (⏱️ 77.58s)
+08:39:43 - INFO -   ▶️  Validate Architectural Compliance
+08:39:43 - INFO - ✅ System passes architectural compliance validation
+08:39:43 - INFO -     📄 Generated: COMPLIANCE_REPORT.md
+08:39:43 - INFO -        📏 Size: 618 chars, 24 lines
+08:39:43 - INFO - 📊 Compliance Summary: 1 violations (0 critical, 0 high priority)
+08:39:43 - INFO -   ✅ Validate Architectural Compliance (⏱️ 0.03s)
+08:39:43 - INFO -   ▶️  Generate Component Tests
+08:41:22 - INFO -     📄 Generated: /tmp/tmpcv_9bqo7/tests/validation_test_system/conftest.py
+08:41:22 - INFO -        📏 Size: 933 chars, 37 lines
+08:41:22 - INFO -     📄 Generated: /tmp/tmpcv_9bqo7/tests/validation_test_system/__init__.py
+08:41:22 - INFO -        📏 Size: 39 chars, 0 lines
+08:41:22 - INFO -     📄 Generated: /tmp/tmpcv_9bqo7/tests/validation_test_system/test_datagenerator_properties.py
+08:41:22 - INFO -        📏 Size: 18516 chars, 410 lines
+08:41:22 - INFO -     📄 Generated: /tmp/tmpcv_9bqo7/tests/validation_test_system/test_dataprocessor_properties.py
+08:41:22 - INFO -        📏 Size: 21306 chars, 472 lines
+08:41:22 - INFO -     📄 Generated: /tmp/tmpcv_9bqo7/tests/validation_test_system/test_datapersister_properties.py
+08:41:22 - INFO -        📏 Size: 21306 chars, 472 lines
+08:41:22 - INFO - ✅ Generated 5 test files successfully
+08:41:22 - INFO -   ✅ Generate Component Tests (⏱️ 99.70s)
+08:41:22 - INFO - 📋 Skipping deployment generation (skip_deployment=True)
+08:41:22 - INFO -   ▶️  Assemble Final System
+   ✅ Copied test files from /tmp/tmpcv_9bqo7/tests/validation_test_system
+   ✅ Saved blueprint.yaml with generated system
+   ✅ Created system_metadata.json with generation details
+   ✅ Copied documentation generator for auto-generated docs
+   🔍 Running comprehensive system AST validation on /tmp/tmpcv_9bqo7/validation_test_system/components
+     ✅ data_persister.py passed AST validation
+     ✅ data_generator.py passed AST validation
+     ✅ communication.py passed AST validation
+     ✅ observability.py passed AST validation
+     ✅ data_processor.py passed AST validation
+   ✅ System AST validation PASSED: 5 component files validated successfully
+      Total issues found within thresholds: 0 critical, 3 high, 0 medium, 0 low
+✅ Setup standalone Python system
+   - Generated requirements.txt with no autocoder dependency
+   - Created setup.py for development installation
+   - Created pyproject.toml for modern packaging
+   - Created README.md with installation instructions
+08:41:22 - INFO -   ✅ Assemble Final System (⏱️ 0.03s)
+08:41:22 - INFO -   📊 Components Generated: 3 components
+08:41:22 - INFO -   📊 Tests Generated: 5 test files
+08:41:22 - INFO -   📊 K8s Manifests: 0 manifests
+08:41:22 - INFO - ✅ Generate System: validation_test_system (⏱️ 186.75s)
+08:41:22 - INFO - 
+08:41:22 - INFO - 🏁 GENERATION SESSION COMPLETED
+08:41:22 - INFO - ⏱️  Total duration: 186.80s
+08:41:22 - INFO - 📊 Steps: 12 completed, 0 failed, 12 total
+08:41:22 - INFO - 📄 Files generated: 15
+08:41:22 - INFO - 📋 Complete session log: /tmp/tmpcv_9bqo7/generation_verbose.json
+✅ System generation complete!
+   Output directory: /tmp/tmpcv_9bqo7/validation_test_system
+   System name: validation_test_system
+   Components: 3
+✅ System generated successfully at: /tmp/tmpcv_9bqo7

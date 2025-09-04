@@ -1,0 +1,80 @@
+CONTROLLER COMPONENT SPECIFIC REQUIREMENTS:
+
+INITIALIZATION:
+- Constructor signature: def __init__(self, name: str, config: Dict[str, Any] = None):
+- Call parent constructor: super().__init__(name, config)
+- Store references to connected components (store_name, etc.) from config
+
+CONTROLLER PATTERN:
+- Acts as business logic orchestrator between API and Store components
+- Receives requests from API components in structured format
+- Sends commands to Store components with proper action names
+
+REQUEST HANDLING FORMAT:
+When receiving from API components, expect this format:
+{
+    "action": "action_name",  # e.g., "add_task", "update_task", "delete_task"
+    "payload": {              # Request data
+        "field1": value1,
+        "field2": value2
+    }
+}
+
+STORE COMMUNICATION FORMAT:
+When sending to Store components, use these exact action names:
+- For CREATE: send {"action": "add_item", "title": ..., "description": ...}
+- For READ single: query {"action": "get_item", "item_id": id}  
+- For READ all: query {"action": "list_items"}
+- For UPDATE: send {"action": "update_item", "item_id": id, "update_data": {...}}
+- For DELETE: send {"action": "delete_item", "item_id": id}
+
+CRITICAL - CORRECT COMMUNICATION METHOD USAGE:
+When communicating with other components, use the CORRECT method signatures:
+- For queries (GET operations):
+  ```python
+  response = await self.query_component(
+      target_component=self.store_component_name,
+      query={"action": "get_item", "item_id": id},
+      target_port="query"
+  )
+  ```
+- For commands (CREATE/UPDATE/DELETE operations):
+  ```python
+  response = await self.send_to_component(
+      target_component=self.store_component_name,
+      data={"action": "add_item", "title": title, "description": desc},
+      target_port="input"
+  )
+  ```
+
+NEVER use MessageEnvelope directly in controller business logic. The communication 
+methods handle message enveloping internally. Pass parameters as shown above.
+
+IMPORTANT PARAMETER MAPPINGS:
+- API sends "add_task" → Controller sends "add_item" to Store
+- API sends "update_task" → Controller sends "update_item" to Store  
+- API sends "delete_task" → Controller sends "delete_item" to Store
+- API sends "get_task" → Controller sends "get_item" to Store
+- API sends "get_all_tasks" → Controller sends "list_items" to Store
+
+PAYLOAD EXTRACTION:
+- Extract task_id/item_id from payload when needed
+- Separate update data from metadata (task_id) for updates
+- Example for update:
+  ```
+  task_id = payload.get("task_id")
+  update_data = {k: v for k, v in payload.items() if k != "task_id"}
+  ```
+
+ERROR HANDLING:
+- Validate required fields before forwarding to Store
+- Return structured error responses on validation failures
+- Check Store response status before returning to API
+
+RESPONSE FORMAT:
+Always return structured responses:
+{
+    "status": "success" | "error",
+    "message": "Human-readable message",
+    "result": <data_from_store>  # Optional, only on success
+}

@@ -1,0 +1,233 @@
+{
+  "scan_timestamp": "2025-07-13T23:02:06.096168",
+  "total_files_scanned": 22,
+  "total_issues_found": 24,
+  "issues_by_severity": {
+    "high": 24
+  },
+  "issues_by_type": {
+    "deprecated_component_pattern": 20,
+    "hardcoded_ip_address": 4
+  },
+  "validation_score": 45.45,
+  "issues": [
+    {
+      "file_path": "autocoder_cc/autocoder/components/__init__.py",
+      "line_number": 5,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/__init__.py",
+      "line_number": 5,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: from.*unified_base.*import",
+      "pattern_matched": "from.*unified_base.*import",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/__init__.py",
+      "line_number": 20,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/message_bus.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/message_bus.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: from.*unified_base.*import",
+      "pattern_matched": "from.*unified_base.*import",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/message_bus.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/message_bus.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: class.*\\(UnifiedComponent\\)",
+      "pattern_matched": "class.*\\(UnifiedComponent\\)",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/metrics_endpoint.py",
+      "line_number": 169,
+      "issue_type": "hardcoded_ip_address",
+      "severity": "high",
+      "description": "Hardcoded ip_address detected: 0.0.0.0",
+      "pattern_matched": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b",
+      "suggested_fix": "Use service discovery or configuration"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/api_endpoint.py",
+      "line_number": 34,
+      "issue_type": "hardcoded_ip_address",
+      "severity": "high",
+      "description": "Hardcoded ip_address detected: 0.0.0.0",
+      "pattern_matched": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b",
+      "suggested_fix": "Use service discovery or configuration"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/api_endpoint.py",
+      "line_number": 34,
+      "issue_type": "hardcoded_ip_address",
+      "severity": "high",
+      "description": "Hardcoded ip_address detected: 0.0.0.0",
+      "pattern_matched": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b",
+      "suggested_fix": "Use service discovery or configuration"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/api_endpoint.py",
+      "line_number": 86,
+      "issue_type": "hardcoded_ip_address",
+      "severity": "high",
+      "description": "Hardcoded ip_address detected: 0.0.0.0",
+      "pattern_matched": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b",
+      "suggested_fix": "Use service discovery or configuration"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/unified_base.py",
+      "line_number": 10,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/unified_base.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/unified_base.py",
+      "line_number": 29,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/unified_base.py",
+      "line_number": 89,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/component_registry.py",
+      "line_number": 179,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/command_handler.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/command_handler.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: from.*unified_base.*import",
+      "pattern_matched": "from.*unified_base.*import",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/command_handler.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/command_handler.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: class.*\\(UnifiedComponent\\)",
+      "pattern_matched": "class.*\\(UnifiedComponent\\)",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/query_handler.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/query_handler.py",
+      "line_number": 16,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: from.*unified_base.*import",
+      "pattern_matched": "from.*unified_base.*import",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/query_handler.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: UnifiedComponent",
+      "pattern_matched": "UnifiedComponent",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    },
+    {
+      "file_path": "autocoder_cc/autocoder/components/cqrs/query_handler.py",
+      "line_number": 19,
+      "issue_type": "deprecated_component_pattern",
+      "severity": "high",
+      "description": "Deprecated component pattern found: class.*\\(UnifiedComponent\\)",
+      "pattern_matched": "class.*\\(UnifiedComponent\\)",
+      "suggested_fix": "Replace with ComposedComponent architecture"
+    }
+  ],
+  "whitelist_applied": false,
+  "scan_duration_seconds": 0.07
+}
